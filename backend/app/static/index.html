@@ -1,0 +1,2364 @@
+<!DOCTYPE html>
+<html lang="sv">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Textbehandlaren</title>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="/static/firebase-auth.js"></script>
+
+    <style>
+        :root {
+            --bg: #ffffff;
+            --text: #1a1a1a;
+            --border: #000000;
+            --accent: #f5f5f5;
+            --muted: #666666;
+            --font: 'Inter', -apple-system, blinkmacsystemfont, 'Segoe UI', roboto, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            line-height: 1.5;
+        }
+
+        /* Sidebar / Boxes */
+        .sidebar {
+            width: 350px;
+            border-right: 2px solid var(--border);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .box {
+            border: 2px solid var(--border);
+            padding: 1.2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: -0.05em;
+        }
+
+        .subtitle {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 0.5rem;
+        }
+
+        label {
+            font-size: 0.65rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        input,
+        textarea,
+        select {
+            width: 100%;
+            border: 1px solid var(--border);
+            padding: 0.6rem;
+            font-family: inherit;
+            font-size: 0.85rem;
+            outline: none;
+            background: var(--bg);
+        }
+
+        button {
+            border: 1px solid var(--border);
+            background: var(--border);
+            color: var(--bg);
+            padding: 0.6rem;
+            font-weight: 700;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            transition: all 0.1s;
+        }
+
+        button:hover {
+            background: var(--bg);
+            color: var(--border);
+        }
+
+        .list-container {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            padding: 0.5rem;
+        }
+
+        .item {
+            padding: 0.4rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .actions {
+            display: flex;
+            gap: 0.4rem;
+        }
+
+        .action-btn {
+            font-size: 0.6rem;
+            padding: 2px 4px;
+            background: none;
+            color: var(--muted);
+            border: 1px solid #ccc;
+            text-transform: none;
+        }
+
+        .action-btn:hover {
+            background: #eee;
+            color: var(--text);
+        }
+
+        .delete-btn {
+            color: #cc0000;
+        }
+
+        .delete-btn:hover {
+            background: #ffe6e6;
+            border-color: #cc0000;
+        }
+
+        /* Main Chat Area */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .chat-header {
+            padding: 1.5rem;
+            border-bottom: 2px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-container {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .message {
+            max-width: 900px;
+            padding: 1.5rem;
+            border: 1px solid var(--border);
+            position: relative;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: var(--accent);
+        }
+
+        .message.ai {
+            align-self: flex-start;
+        }
+
+        .message .role-tag {
+            font-size: 0.55rem;
+            font-weight: 900;
+            position: absolute;
+            top: -8px;
+            left: 10px;
+            background: var(--bg);
+            padding: 0 4px;
+            border: 1px solid var(--border);
+        }
+
+        /* Commenting UI */
+        .comment-btn {
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            margin-top: 1rem;
+            background: none;
+            color: var(--border);
+            border-color: #ccc;
+            width: fit-content;
+        }
+
+        .input-area {
+            padding: 1.5rem;
+            border-top: 2px solid var(--border);
+            display: flex;
+            gap: 1rem;
+            background: var(--bg);
+            position: relative;
+            z-index: 10;
+        }
+
+        .sources {
+            margin-top: 0.8rem;
+            font-size: 0.65rem;
+            color: var(--muted);
+            border-top: 1px solid #eee;
+            padding-top: 0.4rem;
+        }
+
+        .source-list {
+            margin-top: 0.5rem;
+            display: grid;
+            gap: 0.4rem;
+        }
+
+        .source-item {
+            border: 1px solid #ddd;
+            padding: 0.4rem;
+            background: #fafafa;
+        }
+
+        .source-meta {
+            font-size: 0.62rem;
+            color: #444;
+            margin-bottom: 0.2rem;
+        }
+
+        .source-snippet {
+            font-size: 0.62rem;
+            color: #666;
+            white-space: normal;
+        }
+
+        .source-ref-link {
+            border: 1px solid #bbb;
+            background: #fff;
+            color: #111;
+            font-size: 0.6rem;
+            padding: 1px 5px;
+            cursor: pointer;
+            text-transform: none;
+            margin-left: 0.25rem;
+        }
+
+        .source-ref-link:hover {
+            background: #eee;
+        }
+
+        .image-list {
+            margin-top: 0.8rem;
+            border-top: 1px solid #eee;
+            padding-top: 0.5rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 0.6rem;
+        }
+
+        .image-card img {
+            width: 100%;
+            height: 90px;
+            object-fit: cover;
+            border: 1px solid #ddd;
+        }
+
+        .image-card .img-meta {
+            font-size: 0.6rem;
+            color: var(--muted);
+            margin-top: 0.2rem;
+        }
+
+        .inspector-grid {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            gap: 0.8rem;
+        }
+
+        .inspector-list {
+            border: 1px solid #ddd;
+            max-height: 340px;
+            overflow-y: auto;
+        }
+
+        .inspector-item {
+            padding: 0.45rem;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            font-size: 0.68rem;
+        }
+
+        .inspector-item.active {
+            background: #f0f0f0;
+            font-weight: 700;
+        }
+
+        .inspector-detail {
+            border: 1px solid #ddd;
+            padding: 0.7rem;
+            min-height: 340px;
+            overflow-y: auto;
+            font-size: 0.68rem;
+            white-space: pre-wrap;
+        }
+
+        .message-content h1,
+        .message-content h2,
+        .message-content h3 {
+            margin: 0.8rem 0 0.4rem 0;
+            line-height: 1.25;
+        }
+
+        .message-content h1 {
+            font-size: 1.15rem;
+        }
+
+        .message-content h2 {
+            font-size: 1rem;
+        }
+
+        .message-content h3 {
+            font-size: 0.9rem;
+        }
+
+        .message-content p {
+            margin: 0.35rem 0;
+            white-space: pre-wrap;
+        }
+
+        .commentable-block {
+            position: relative;
+            padding-right: 24px;
+        }
+
+        .inline-comment-btn {
+            position: absolute;
+            right: 0;
+            top: 0;
+            border: 1px solid #bbb;
+            background: #fff;
+            color: #111;
+            font-size: 0.58rem;
+            padding: 1px 4px;
+            line-height: 1.1;
+            text-transform: none;
+            cursor: pointer;
+        }
+
+        .inline-comment-btn:hover {
+            background: #eee;
+        }
+
+        .message-content ul,
+        .message-content ol {
+            margin: 0.3rem 0 0.45rem 1.2rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="sidebar">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div>
+                <h1>Textbehandlaren</h1>
+                <div class="subtitle">Platform V4: Shared Knowledge</div>
+            </div>
+            <button onclick="loadData()" title="Uppdatera listor"
+                style="background:none; color:var(--muted); border:1px solid #ccc; padding:4px 8px; font-size:0.6rem; width:auto;">
+                Uppdatera
+            </button>
+        </div>
+
+        <div id="auth-section" class="box" style="padding: 1rem;">
+            Laddar inloggning...
+        </div>
+
+        <details class="box requires-auth" style="padding:0.8rem;">
+            <summary style="cursor:pointer; font-size:0.72rem; font-weight:600;">Snabbguide (Notebook-liknande)
+            </summary>
+            <div style="font-size:0.66rem; color:var(--muted); margin-top:0.5rem;">
+                <div>1. Välj assistent och koppla bibliotek/mall.</div>
+                <div>2. Ställ en fråga i läget <b>Snabbt</b> för första utkast.</div>
+                <div>3. Förfina med styckeskommentarer (💬) i svaret.</div>
+                <div>4. Använd <b>Fördjupat</b> för slutversion och export.</div>
+            </div>
+        </details>
+
+        <div id="health-section" class="box requires-auth" style="padding: 1rem;">
+            <label>Systemstatus</label>
+            <div id="healthStatus" style="font-size: 0.7rem; color: var(--muted);">Laddar...</div>
+            <button onclick="fetchHealth()"
+                style="background:none; color:black; border:1px solid #ccc; text-transform:none; font-size:0.7rem;">Uppdatera</button>
+        </div>
+
+        <!-- Projects -->
+        <div class="box requires-auth">
+            <label>Projekt</label>
+            <div id="projectsList" class="list-container">Laddar...</div>
+            <button onclick="showNewModal('projectModal')">+ Skapa Projekt</button>
+            <button onclick="clearActiveProject()" style="background:none; color:black;">Rensa aktivt projekt</button>
+            <button onclick="openProjectMembersModal()" style="background:none; color:black;">Hantera medlemmar</button>
+        </div>
+
+        <!-- 1. Libraries -->
+        <div class="box requires-auth">
+            <label>Mina Bibliotek (Kunskap)</label>
+            <div id="librariesList" class="list-container">Laddar...</div>
+            <button onclick="showNewModal('libraryModal')">+ Skapa Bibliotek</button>
+        </div>
+
+        <!-- 2. Assistants -->
+        <div class="box requires-auth">
+            <label>Mina Assistenter (Personas)</label>
+            <div id="assistantsList" class="list-container">Laddar...</div>
+            <button onclick="showNewModal('assistantModal')">+ Skapa Assistent</button>
+        </div>
+
+        <!-- 3. Templates -->
+        <div class="box requires-auth">
+            <label>Word-mallar</label>
+            <div id="templatesList" class="list-container">Laddar...</div>
+            <button onclick="document.getElementById('templateInput').click()">Ladda upp mall</button>
+            <input type="file" id="templateInput" hidden accept=".docx">
+        </div>
+
+        <!-- 4. Learned Preferences -->
+        <div class="box requires-auth">
+            <label>Systemets Lärdomar</label>
+            <div id="learnedPrefs" style="font-size: 0.65rem; color: var(--muted);">Inga preferenser sparade än.</div>
+            <textarea id="personalRulesInput"
+                placeholder="Egna regler (en per rad), t.ex.&#10;Använd alltid rubriker i tre nivåer.&#10;Undvik upprepningar mellan avsnitt."
+                style="margin-top:0.5rem; min-height:90px; font-size:0.65rem;"></textarea>
+            <button onclick="savePersonalRules()">Spara personliga regler</button>
+            <button id="learnBtn" style="display:none;" onclick="learnFromChat()">Lär av konversation</button>
+        </div>
+
+        <!-- 5. Conversation History -->
+        <div class="box requires-auth">
+            <label>Tidigare Konversationer</label>
+            <div id="historyList" class="list-container">Inget inloggat...</div>
+        </div>
+
+        <!-- 6. Admin -->
+        <div class="requires-auth requires-superadmin"
+            style="margin-top: auto; padding-top: 1rem; border-top: 1px solid #ddd;">
+            <button onclick="showAdminDashboard()"
+                style="background:none; color:var(--muted); border:none; padding:0; text-transform:none; font-size:0.65rem;">Admin-läge</button>
+        </div>
+
+        <button id="exportBtn" class="requires-auth" disabled>Exportera aktuell text</button>
+    </div>
+
+    <div class="main-content requires-auth">
+        <div class="chat-header">
+            <div id="activeHeader">Välj en assistent för att börja</div>
+            <div style="font-size: 0.6rem; color: var(--muted);" id="linkedLibs">Inga bibliotek kopplade</div>
+        </div>
+
+        <details class="box" style="padding:0.6rem 0.8rem; margin-bottom:0.6rem;">
+            <summary style="cursor:pointer; font-size:0.68rem; font-weight:600;">Hjälp för bättre svar</summary>
+            <div style="font-size:0.64rem; color:var(--muted); margin-top:0.4rem;">
+                <div>• Skriv vad som är viktigast (t.ex. “prioritera översiktsplanen”).</div>
+                <div>• Ange önskat format (“med H1/H2 och punktlistor”).</div>
+                <div>• För långa dokument: välj <b>Fördjupat</b> och målord.</div>
+                <div>• För snabb kontrollfråga: välj <b>Snabbt</b> för lägre kostnad.</div>
+            </div>
+        </details>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message ai">
+                <div class="role-tag">INFO</div>
+                Välkommen. Textbehandlaren V4 låter dig dela bibliotek och iterera fram dokument genom dialog.
+            </div>
+        </div>
+
+        <div class="input-area" id="chatInputArea" style="display: none; flex-direction: column; gap: 0.5rem;">
+            <div style="display: flex; gap: 0.8rem; width: 100%; align-items: center;">
+                <button onclick="openAttachmentModal()" title="Bifoga fil"
+                    style="background:none; color:black; font-size: 1.2rem; border: none; padding: 0; width: auto;">📎</button>
+                <input type="text" id="userInput" placeholder="Ställ en fråga eller kommentera på senaste svaret..."
+                    style="flex: 1;">
+                <button id="sendBtn" style="width: 80px;">Skicka</button>
+            </div>
+            <div style="font-size: 0.65rem; color: var(--muted); display: flex; gap: 1rem;">
+                <select id="responseMode"
+                    style="width: 150px; border:1px solid var(--border); padding:0.2rem 0.4rem; font-size:0.65rem;">
+                    <option value="auto">Svarsläge: Auto</option>
+                    <option value="fast">Svarsläge: Snabbt</option>
+                    <option value="standard">Svarsläge: Standard</option>
+                    <option value="deep">Svarsläge: Fördjupat</option>
+                </select>
+                <label style="display: flex; align-items: center; gap: 0.3rem; margin: 0; cursor: pointer;">
+                    <input type="checkbox" id="showCitations" checked style="width: auto;"> Visa källhänvisningar
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.3rem; margin: 0; cursor: pointer;">
+                    <input type="checkbox" id="includeImagesExport" checked style="width: auto;"> Inkludera bilder i
+                    export
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.3rem; margin: 0; cursor: pointer;">
+                    <input type="checkbox" id="suggestImages" checked style="width: auto;"> Föreslå bildplacering
+                </label>
+                <input type="number" id="targetPages" min="1" placeholder="Målsidor (t.ex. 15)"
+                    style="width: 130px; border:1px solid var(--border); padding:0.2rem 0.4rem; font-size:0.65rem;">
+                <input type="number" id="targetWords" min="300" step="100" placeholder="Målord (t.ex. 1800)"
+                    style="width: 140px; border:1px solid var(--border); padding:0.2rem 0.4rem; font-size:0.65rem;">
+                <label style="display: flex; align-items: center; gap: 0.3rem; margin: 0; cursor: pointer;">
+                    <input type="checkbox" id="longformMode" style="width: auto;"> Utförligt svar
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals (Simple overlays) -->
+    <div id="libraryModal" class="box"
+        style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%); background:white; z-index:100; width:400px; box-shadow: 0 0 100px rgba(0,0,0,0.5);">
+        <label>Nytt Bibliotek</label>
+        <input type="text" id="libName" placeholder="Namn">
+        <textarea id="libDesc" placeholder="Beskrivning"></textarea>
+        <label>Bibliotekstyp</label>
+        <select id="libType">
+            <option value="BACKGROUND">Bakgrundsmaterial (Betrott)</option>
+            <option value="INPUT">Inkomna synpunkter (Känsligt)</option>
+        </select>
+        <label>Prioritet (0-100)</label>
+        <input type="number" id="libPriority" min="0" max="100" value="50" placeholder="50 = normal vikt">
+        <div style="font-size: 0.6rem; display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" id="libScrub" style="width: auto;"> Aktivera automatisk GDPR-skrubbning (Mistral)
+        </div>
+        <div style="font-size: 0.6rem; display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" id="libGdprDefault" style="width: auto;"> Default: GDPR-namntvätt vid uppladdning
+        </div>
+        <button onclick="createLibrary()">Skapa</button>
+        <button onclick="hideModal('libraryModal')" style="background:none; color:black;">Stäng</button>
+    </div>
+
+    <div id="assistantModal" class="box"
+        style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%); background:white; z-index:100; width:400px; box-shadow: 0 0 100px rgba(0,0,0,0.5);">
+        <label>Ny Assistent</label>
+        <input type="text" id="asstName" placeholder="Namn">
+        <textarea id="asstPrompt" placeholder="Systemprompt"></textarea>
+        <label>Koppla bibliotek (Håll in Ctrl för att välja flera)</label>
+        <select id="asstLibs" multiple style="height: 80px;"></select>
+        <label>Modell för assistent</label>
+        <select id="asstModel">
+            <option value="">Systemstandard (global)</option>
+            <option value="claude-3-5-sonnet-20241022">Claude Sonnet 3.5</option>
+            <option value="claude-3-5-haiku-20241022">Claude Haiku 3.5</option>
+            <option value="claude-3-haiku-20240307">Claude Haiku 3</option>
+        </select>
+        <label>Prioriteringsprofil per bibliotek (0-100)</label>
+        <div id="asstPriorityProfile"
+            style="border:1px solid var(--border); padding:0.5rem; max-height:150px; overflow-y:auto; font-size:0.65rem;">
+            Välj bibliotek för att ställa prioritet.
+        </div>
+        <label>Välj mall</label>
+        <select id="asstTemplate"></select>
+        <button onclick="createAssistant()">Skapa</button>
+        <button onclick="hideModal('assistantModal')" style="background:none; color:black;">Stäng</button>
+    </div>
+
+    <div id="projectModal" class="box"
+        style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%); background:white; z-index:100; width:400px; box-shadow: 0 0 100px rgba(0,0,0,0.5);">
+        <label>Nytt Projekt</label>
+        <input type="text" id="projectName" placeholder="Projektnamn">
+        <textarea id="projectDesc" placeholder="Beskrivning"></textarea>
+        <button onclick="createProject()">Skapa</button>
+        <button onclick="hideModal('projectModal')" style="background:none; color:black;">Stäng</button>
+    </div>
+
+    <div id="projectMembersModal" class="box"
+        style="display:none; position:fixed; top:15%; left:50%; transform:translateX(-50%); background:white; z-index:110; width:620px; box-shadow: 0 0 100px rgba(0,0,0,0.5); max-height:75vh; overflow-y:auto;">
+        <label>Projektmedlemmar</label>
+        <div id="projectMembersHeader" style="font-size:0.7rem; color:var(--muted); margin-bottom:0.6rem;">Välj ett
+            projekt först.</div>
+
+        <div
+            style="display:grid; grid-template-columns: 2fr 1fr auto; gap:0.5rem; align-items:end; margin-bottom:0.8rem;">
+            <div>
+                <label>Bjud in via e-post</label>
+                <input type="email" id="inviteEmail" placeholder="namn@domän.se">
+            </div>
+            <div>
+                <label>Roll</label>
+                <select id="inviteRole">
+                    <option value="VIEWER">Viewer</option>
+                    <option value="EDITOR">Editor</option>
+                </select>
+            </div>
+            <button onclick="inviteProjectMember()">Bjud in</button>
+        </div>
+
+        <div id="projectMembersList" class="list-container" style="max-height:320px;">Inga medlemmar att visa.</div>
+        <button onclick="hideModal('projectMembersModal')"
+            style="background:none; color:black; margin-top:0.8rem;">Stäng</button>
+    </div>
+
+    <!-- Upload Modal -->
+    <div id="uploadModal" class="box"
+        style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%); background:white; z-index:100; width:400px; box-shadow: 0 0 100px rgba(0,0,0,0.5);">
+        <label id="uploadLabel">Ladda upp till Bibliotek</label>
+        <input type="file" id="docInput" accept=".pdf,.docx,.txt" multiple>
+        <div id="fileCount" style="font-size: 0.7rem; color: var(--muted); margin-top: 0.3rem;"></div>
+        <div style="font-size: 0.6rem;"><input type="checkbox" id="interpretImages"> Tolka bilder</div>
+        <div style="font-size: 0.6rem;">
+            <input type="checkbox" id="gdprNameScrub">
+            GDPR-namntvätt via EU (Mistral): ersätt endast personnamn med DOKUMENTKORT_xxxx
+        </div>
+        <button onclick="uploadToLibrary(event)">Ladda upp</button>
+        <button onclick="hideModal('uploadModal')" style="background:none; color:black;">Stäng</button>
+    </div>
+    <!-- Document List Modal -->
+    <div id="docsModal" class="box"
+        style="display:none; position:fixed; top:15%; left:50%; transform:translateX(-50%); background:white; z-index:100; width:600px; box-shadow: 0 0 100px rgba(0,0,0,0.5); max-height:70vh; overflow-y:auto;">
+        <label id="docsModalLabel">Filer i Bibliotek</label>
+        <div id="docsList" style="margin-top: 1rem;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem;">
+                <thead>
+                    <tr style="border-bottom: 2px solid var(--border); text-align: left;">
+                        <th style="padding: 0.5rem;">Filnamn</th>
+                        <th style="padding: 0.5rem;">Uppladdad</th>
+                        <th style="padding: 0.5rem;">AI-bilder</th>
+                        <th style="padding: 0.5rem;">GDPR</th>
+                        <th style="padding: 0.5rem;">Status</th>
+                        <th style="padding: 0.5rem;">Indexering</th>
+                    </tr>
+                </thead>
+                <tbody id="docsTableBody">
+                    <tr>
+                        <td colspan="6" style="padding: 1rem; text-align: center;">Laddar filer...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <button onclick="hideModal('docsModal')" style="background:none; color:black; margin-top: 1rem;">Stäng</button>
+    </div>
+
+    <div id="sourceInspectorModal" class="box"
+        style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%); background:white; z-index:115; width:840px; box-shadow: 0 0 100px rgba(0,0,0,0.5); max-height:80vh; overflow-y:auto;">
+        <label>Källinspektor</label>
+        <div id="sourceInspectorHeader" style="font-size:0.68rem; color:var(--muted); margin-bottom:0.6rem;">Ingen källa
+            vald.</div>
+        <div class="inspector-grid">
+            <div id="sourceInspectorList" class="inspector-list"></div>
+            <div id="sourceInspectorDetail" class="inspector-detail">Välj en källa i listan.</div>
+        </div>
+        <button onclick="hideModal('sourceInspectorModal')"
+            style="background:none; color:black; margin-top: 0.8rem;">Stäng</button>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="adminModal" class="box"
+        style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%); background:white; z-index:110; width:600px; box-shadow: 0 0 100px rgba(0,0,0,0.5); max-height:80vh; overflow-y:auto;">
+        <label>Systemadministratör</label>
+        <div id="adminStats" style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+            <div class="box" style="padding:0.5rem;"><label>Assistenter</label><span id="statAssts">-</span></div>
+            <div class="box" style="padding:0.5rem;"><label>Bibliotek</label><span id="statLibs">-</span></div>
+        </div>
+        <label>Alla systemresurser</label>
+        <div id="allResourcesList" style="font-size:0.7rem; color:var(--muted);">Laddar...</div>
+
+        <label style="margin-top:0.8rem;">GDPR-Audit</label>
+        <div
+            style="display:grid; grid-template-columns: 1fr 1fr 0.8fr 0.7fr auto; gap:0.5rem; align-items:end; margin-bottom:0.6rem;">
+            <div>
+                <label>Projekt</label>
+                <select id="auditProjectFilter">
+                    <option value="">Alla</option>
+                </select>
+            </div>
+            <div>
+                <label>Bibliotek</label>
+                <select id="auditLibraryFilter">
+                    <option value="">Alla</option>
+                </select>
+            </div>
+            <div>
+                <label>Status</label>
+                <select id="auditStatusFilter">
+                    <option value="all">Alla</option>
+                    <option value="completed">Completed</option>
+                    <option value="processing">Processing</option>
+                    <option value="failed">Failed</option>
+                </select>
+            </div>
+            <div>
+                <label>Dagar</label>
+                <input id="auditDaysFilter" type="number" min="1" value="90">
+            </div>
+            <button onclick="loadAdminGdprAudit()">Ladda</button>
+        </div>
+        <div id="gdprAuditList"
+            style="font-size:0.67rem; color:var(--muted); max-height:280px; overflow-y:auto; border:1px solid #ddd; padding:0.5rem;">
+            Ingen auditdata laddad.
+        </div>
+
+        <label style="margin-top:0.8rem;">LLM-styrning</label>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; align-items:end; margin-bottom:0.6rem;">
+            <div>
+                <label>Global modell</label>
+                <select id="adminGlobalModel"></select>
+            </div>
+            <div>
+                <label>Fallbackmodell</label>
+                <select id="adminFallbackModel"></select>
+            </div>
+        </div>
+        <div style="font-size:0.67rem; margin-bottom:0.5rem;">
+            <input id="adminAllowAsstModelOverride" type="checkbox" style="width:auto;">
+            Tillåt assistent-specifik modellöverstyrning
+        </div>
+        <button onclick="saveAdminLlmRouting()">Spara LLM-styrning</button>
+        <button onclick="hideModal('adminModal')" style="background:none; color:black; margin-top:1rem;">Stäng</button>
+    </div>
+
+    <script>
+        let assistants = [];
+        let libraries = [];
+        let projects = [];
+        let currentProject = null;
+        let currentAssistant = null;
+        let selectedLibrary = null; // For uploading docs
+        let currentConversationId = null;
+        let lastResponse = null;
+        let attachmentMode = false;
+        let messageSourceMap = {};
+        let sourceInspectorMessageId = null;
+        let assistantPriorityDraft = {};
+        let currentUserProfile = null;
+
+        function applyRoleVisibility() {
+            const role = currentUserProfile?.role || "";
+            const isSuperadmin = role === "SUPERADMIN";
+            document.querySelectorAll('.requires-superadmin').forEach(el => {
+                el.style.display = isSuperadmin ? 'block' : 'none';
+            });
+        }
+
+        async function ensureIdToken(userHint = null, forceRefresh = false) {
+            const user = userHint || currentUser || auth.currentUser || null;
+            if (!user) {
+                idToken = null;
+                return null;
+            }
+            try {
+                const token = await user.getIdToken(forceRefresh);
+                if (token) idToken = token;
+                return idToken;
+            } catch (err) {
+                console.error("Kunde inte läsa idToken:", err);
+                return null;
+            }
+        }
+
+        // Fetchers
+        async function loadData() {
+            if (!idToken) {
+                await ensureIdToken();
+            }
+            if (!idToken) {
+                document.getElementById('librariesList').innerText = "Logga in för att se bibliotek.";
+                document.getElementById('assistantsList').innerText = "Logga in för att se assistenter.";
+                document.getElementById('templatesList').innerText = "Logga in för att se mallar.";
+                document.getElementById('historyList').innerText = "Logga in för att se konversationer.";
+                document.getElementById('projectsList').innerText = "Logga in för att se projekt.";
+                currentUserProfile = null;
+                applyRoleVisibility();
+                return;
+            }
+            try {
+                // Added cache-buster to avoid stale reads
+                const t = Date.now();
+                const [libs, assts, temps, projs, me] = await Promise.all([
+                    fetch(`/api/libraries?t=${t}`, { headers: getAuthHeaders() }).then(r => r.json()),
+                    fetch(`/api/assistants?t=${t}`, { headers: getAuthHeaders() }).then(r => r.json()),
+                    fetch(`/api/templates?t=${t}`, { headers: getAuthHeaders() }).then(r => r.json()),
+                    fetch(`/api/projects?t=${t}`, { headers: getAuthHeaders() }).then(r => r.json()),
+                    fetch(`/api/users/me?t=${t}`, { headers: getAuthHeaders() }).then(r => r.json())
+                ]);
+
+                libraries = libs;
+                assistants = assts;
+                projects = projs;
+                currentUserProfile = me;
+                applyRoleVisibility();
+
+                renderList('librariesList', libs, 'selectLibrary');
+                renderList('assistantsList', assts, 'selectAssistant');
+                renderTemplates(temps);
+                renderProjects(projs);
+
+                // Fill select boxes
+                const asstLibs = document.getElementById('asstLibs');
+                asstLibs.innerHTML = libs.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+                const asstTemp = document.getElementById('asstTemplate');
+                asstTemp.innerHTML = `<option value="">Standardmall</option>` + temps.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+                renderAssistantPriorityProfile(assistantPriorityDraft);
+
+                fetchConversations();
+                fetchHealth();
+            } catch (err) {
+                console.error("Failed to load data:", err);
+            }
+        }
+
+        // Reload data when auth state changes
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                await ensureIdToken(user);
+            } else {
+                idToken = null;
+            }
+            await loadData();
+            if (!user) {
+                currentUserProfile = null;
+                applyRoleVisibility();
+            }
+        });
+
+        // Polling to keep lists in sync (every 60 seconds)
+        setInterval(() => {
+            if (idToken && !document.hidden) {
+                console.log("Heartbeat: refreshing data...");
+                loadData();
+            }
+        }, 60000);
+
+        async function fetchHealth() {
+            if (!idToken) return;
+            const el = document.getElementById('healthStatus');
+            if (!el) return;
+            el.innerText = "Kontrollerar...";
+            try {
+                const res = await fetch('/api/health', { headers: getAuthHeaders() });
+                const data = await res.json();
+                const firebaseOk = data.firebase?.ok ? "OK" : "Fel";
+                const claudeOk = data.anthropic?.configured ? "OK" : "Saknas";
+                const fallback = data.local_fallback ? "På" : "Av";
+                const devBypass = data.dev_auth_bypass ? "På" : "Av";
+                const emb = data.embeddings?.checked
+                    ? (data.embeddings?.ok ? "OK" : "Fel")
+                    : "Ej testad";
+                el.innerHTML = `
+                    <div>Firebase: ${firebaseOk}</div>
+                    <div>Claude‑nyckel: ${claudeOk}</div>
+                    <div>Embeddings: ${emb}</div>
+                    <div>Lokal fallback: ${fallback}</div>
+                    <div>Dev auth-bypass: ${devBypass}</div>
+                `;
+            } catch (err) {
+                console.error("Health check failed:", err);
+                el.innerText = "Kunde inte läsa status.";
+            }
+        }
+
+        function selectLibrary(item) {
+            attachmentMode = false;
+            selectedLibrary = item;
+            showModal('uploadModal');
+            document.getElementById('uploadLabel').innerText = `Ladda upp till ${item.name}`;
+            const gdprCb = document.getElementById('gdprNameScrub');
+            if (gdprCb) gdprCb.checked = !!item.gdpr_name_scrub_default;
+        }
+
+        function renderList(id, data, onClickFnName) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const isLib = id.includes('libraries');
+            const type = isLib ? 'library' : 'assistant';
+
+            el.innerHTML = data.map(item => {
+                const itemJson = JSON.stringify(item).replace(/'/g, "&apos;");
+                const key = `${type}-${item.id}`;
+                const isPending = pendingDeletes[key];
+
+                return `
+                <div class="item">
+                    <span onclick='event.stopPropagation(); ${onClickFnName}(${itemJson})' style="flex:1; cursor:pointer;">${item.name}${isLib ? ` (P:${item.priority ?? 50})` : ""}${!isLib && item.model_preference ? ` [${item.model_preference}]` : ""}</span>
+                    <div class="actions">
+                        ${currentProject && isLib ? `<span class="action-btn" onclick='event.stopPropagation(); addLibraryToProject("${item.id}")' title="Lägg till i aktivt projekt">🔗</span>` : ''}
+                        ${currentProject && !isLib ? `<span class="action-btn" onclick='event.stopPropagation(); addAssistantToProject("${item.id}")' title="Lägg till i aktivt projekt">🔗</span>` : ''}
+                        ${isLib ? `<span class="action-btn" onclick='event.stopPropagation(); showDocuments("${item.id}", "${item.name}")' title="Visa filer">📁</span>` : ''}
+                        ${isLib ? `<span class="action-btn" onclick='event.stopPropagation(); selectLibrary(${itemJson})' title="Ladda upp fil">📤</span>` : ''}
+                        <span class="action-btn" onclick='event.stopPropagation(); openEditModal("${type}", ${itemJson})' title="Redigera">✎</span>
+                        <span class="action-btn delete-btn" onclick='event.stopPropagation(); deleteResource("${type}", "${item.id}", event)' 
+                              style="${isPending ? 'color: #cc0000;' : ''}"
+                              title="Ta bort">${isPending ? 'Säker?' : '×'}</span>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        function renderProjects(data) {
+            const el = document.getElementById('projectsList');
+            if (!el) return;
+            if (!data || data.length === 0) {
+                el.innerText = "Inga projekt än.";
+                return;
+            }
+            el.innerHTML = data.map(p => {
+                const isActive = currentProject && currentProject.id === p.id;
+                return `
+                <div class="item">
+                    <span onclick='event.stopPropagation(); selectProject("${p.id}")' style="flex:1; cursor:pointer;">
+                        ${p.name} ${isActive ? "(aktiv)" : ""}
+                    </span>
+                </div>
+                `;
+            }).join('');
+        }
+
+        let editingResourceId = null;
+
+        function clampPriorityValue(value, fallback = 50) {
+            if (!Number.isFinite(value)) return fallback;
+            return Math.max(0, Math.min(100, value));
+        }
+
+        function getAssistantPriorityDraft() {
+            const map = { ...assistantPriorityDraft };
+            document.querySelectorAll('#asstPriorityProfile input[data-lib-id]').forEach((input) => {
+                const libId = input.dataset.libId;
+                if (!libId) return;
+                const parsed = parseInt(input.value || input.placeholder || '50', 10);
+                map[libId] = clampPriorityValue(parsed, 50);
+            });
+            return map;
+        }
+
+        function renderAssistantPriorityProfile(seed = null) {
+            const container = document.getElementById('asstPriorityProfile');
+            const select = document.getElementById('asstLibs');
+            if (!container || !select) return;
+
+            const selectedIds = Array.from(select.selectedOptions).map(o => o.value);
+            const preserved = seed || getAssistantPriorityDraft();
+            assistantPriorityDraft = { ...preserved };
+
+            if (selectedIds.length === 0) {
+                container.innerHTML = "Välj bibliotek för att ställa prioritet.";
+                return;
+            }
+
+            container.innerHTML = selectedIds.map((libId) => {
+                const lib = libraries.find(l => l.id === libId) || {};
+                const defaultPriority = clampPriorityValue(parseInt(String(lib.priority ?? 50), 10), 50);
+                const currentPriority = clampPriorityValue(parseInt(String(preserved[libId] ?? defaultPriority), 10), defaultPriority);
+                return `
+                    <div style="display:grid; grid-template-columns: 1fr 90px; gap:0.5rem; align-items:center; margin-bottom:0.35rem;">
+                        <span>${escapeHtml(lib.name || libId)}</span>
+                        <input type="number" min="0" max="100" data-lib-id="${libId}" value="${currentPriority}" placeholder="${defaultPriority}" style="margin:0; padding:0.2rem 0.4rem;">
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function collectAssistantPriorityProfile(selectedLibraryIds) {
+            const selected = new Set(selectedLibraryIds || []);
+            const profile = [];
+            document.querySelectorAll('#asstPriorityProfile input[data-lib-id]').forEach((input) => {
+                const libId = input.dataset.libId;
+                if (!libId || !selected.has(libId)) return;
+                const value = parseInt(input.value || input.placeholder || '50', 10);
+                profile.push({
+                    library_id: libId,
+                    priority: clampPriorityValue(value, 50)
+                });
+            });
+            return profile;
+        }
+
+        function openEditModal(type, item) {
+            editingResourceId = item.id;
+            if (type === 'library') {
+                document.getElementById('libName').value = item.name;
+                document.getElementById('libDesc').value = item.description || "";
+                document.getElementById('libType').value = item.library_type || "BACKGROUND";
+                document.getElementById('libPriority').value = (item.priority ?? 50);
+                document.getElementById('libScrub').checked = item.scrub_enabled || false;
+                document.getElementById('libGdprDefault').checked = item.gdpr_name_scrub_default || false;
+                showModal('libraryModal');
+            } else {
+                document.getElementById('asstName').value = item.name;
+                document.getElementById('asstPrompt').value = item.system_prompt;
+                document.getElementById('asstTemplate').value = item.template_id || "";
+                document.getElementById('asstModel').value = item.model_preference || "";
+                const selectedLibs = Array.isArray(item.library_ids) ? item.library_ids : [];
+                const asstLibs = document.getElementById('asstLibs');
+                Array.from(asstLibs.options).forEach((opt) => {
+                    opt.selected = selectedLibs.includes(opt.value);
+                });
+                assistantPriorityDraft = {};
+                (item.library_priority_profile || []).forEach((row) => {
+                    if (!row || !row.library_id) return;
+                    const prio = parseInt(String(row.priority ?? 50), 10);
+                    assistantPriorityDraft[row.library_id] = clampPriorityValue(prio, 50);
+                });
+                renderAssistantPriorityProfile(assistantPriorityDraft);
+                showModal('assistantModal');
+            }
+        }
+
+        // Reset modals when creating new
+        function showNewModal(id) {
+            editingResourceId = null;
+            const modal = document.getElementById(id);
+            modal.querySelectorAll('input, textarea, select').forEach(el => {
+                if (el.type === 'checkbox') el.checked = false;
+                else el.value = '';
+            });
+            if (id === 'libraryModal') {
+                document.getElementById('libType').value = 'BACKGROUND';
+                document.getElementById('libPriority').value = '50';
+            }
+            if (id === 'assistantModal') {
+                const asstLibs = document.getElementById('asstLibs');
+                if (asstLibs) {
+                    Array.from(asstLibs.options).forEach((opt) => { opt.selected = false; });
+                }
+                assistantPriorityDraft = {};
+                renderAssistantPriorityProfile(assistantPriorityDraft);
+            }
+            showModal(id);
+        }
+
+        function clearActiveProject() {
+            currentProject = null;
+            renderProjects(projects);
+            if (currentAssistant) {
+                const libCount = (currentAssistant.library_ids || []).length;
+                document.getElementById('linkedLibs').innerText = `${libCount} bibliotek kopplade`;
+            }
+            renderList('librariesList', libraries, 'selectLibrary');
+            renderList('assistantsList', assistants, 'selectAssistant');
+        }
+
+        let pendingDeletes = {};
+        async function deleteResource(type, id, event) {
+            const key = `${type}-${id}`;
+            const btn = event ? event.target : null;
+
+            if (!pendingDeletes[key]) {
+                pendingDeletes[key] = true;
+                if (type === 'library') renderList('librariesList', libraries, 'selectLibrary');
+                else if (type === 'template') loadData(); // renderTemplates is called in loadData
+                else renderList('assistantsList', assistants, 'selectAssistant');
+
+                setTimeout(() => {
+                    if (pendingDeletes[key]) {
+                        delete pendingDeletes[key];
+                        if (type === 'library') renderList('librariesList', libraries, 'selectLibrary');
+                        else if (type === 'template') loadData();
+                        else renderList('assistantsList', assistants, 'selectAssistant');
+                    }
+                }, 3000);
+                return;
+            }
+
+            let endpoint = "";
+            if (type === 'library') endpoint = `/api/libraries/${id}`;
+            else if (type === 'assistant') endpoint = `/api/assistants/${id}`;
+            else if (type === 'template') endpoint = `/api/templates/${id}`;
+
+            const res = await fetch(endpoint, {
+                method: 'DELETE',
+                headers: getAuthHeaders()
+            });
+            if (res.ok) {
+                delete pendingDeletes[key];
+                loadData();
+            } else {
+                const err = await res.json();
+                alert("Fel vid borttagning: " + (err.detail || "Okänt fel"));
+            }
+        }
+
+        function renderTemplates(temps) {
+            document.getElementById('templatesList').innerHTML = temps.map(t => {
+                const key = `template-${t.id}`;
+                const isPending = pendingDeletes[key];
+                return `
+                <div class="item">
+                    <span style="flex:1;">${t.name}</span>
+                    <span class="action-btn delete-btn" onclick='event.stopPropagation(); deleteResource("template", "${t.id}", event)'
+                          style="${isPending ? 'color: #cc0000;' : ''}"
+                          title="Ta bort">${isPending ? 'Säker?' : '×'}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function handleItemClick(item, fn) {
+            fn(item);
+        }
+
+        function showModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function hideModal(id) {
+            document.getElementById(id).style.display = 'none';
+            if (id === 'docsModal' && docsRefreshTimer) {
+                clearInterval(docsRefreshTimer);
+                docsRefreshTimer = null;
+                currentDocsLibId = null;
+                currentDocsLibName = null;
+            }
+        }
+
+        // Actions
+        async function createLibrary() {
+            const name = document.getElementById('libName').value;
+            if (!name) return alert("Ange ett namn");
+
+            const method = editingResourceId ? 'PUT' : 'POST';
+            const endpoint = editingResourceId ? `/api/libraries/${editingResourceId}` : '/api/libraries';
+            const prioRaw = parseInt(document.getElementById('libPriority').value || '50', 10);
+            const priority = Number.isFinite(prioRaw) ? Math.max(0, Math.min(100, prioRaw)) : 50;
+
+            const res = await fetch(endpoint, {
+                method: method,
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    name,
+                    description: document.getElementById('libDesc').value,
+                    library_type: document.getElementById('libType').value,
+                    scrub_enabled: document.getElementById('libScrub').checked,
+                    gdpr_name_scrub_default: document.getElementById('libGdprDefault').checked,
+                    priority: priority
+                })
+            });
+
+            if (res.ok) {
+                hideModal('libraryModal');
+                // Small delay to let Firestore index catch up
+                setTimeout(loadData, 500);
+            } else {
+                const err = await res.json();
+                alert("Fel vid skapande: " + (err.detail || "Okänt fel"));
+            }
+        }
+
+        async function createAssistant() {
+            const name = document.getElementById('asstName').value;
+            if (!name) return alert("Ange ett namn");
+
+            const prompt = document.getElementById('asstPrompt').value;
+            const library_ids = Array.from(document.getElementById('asstLibs').selectedOptions).map(o => o.value);
+            const library_priority_profile = collectAssistantPriorityProfile(library_ids);
+            const template_id = document.getElementById('asstTemplate').value;
+            const model_preference = document.getElementById('asstModel').value || null;
+
+            const method = editingResourceId ? 'PUT' : 'POST';
+            const endpoint = editingResourceId ? `/api/assistants/${editingResourceId}` : '/api/assistants';
+
+            const res = await fetch(endpoint, {
+                method: method,
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ name, system_prompt: prompt, library_ids, library_priority_profile, template_id, model_preference })
+            });
+
+            if (res.ok) {
+                hideModal('assistantModal');
+                setTimeout(loadData, 500);
+            } else {
+                const err = await res.json();
+                alert("Fel vid skapande: " + (err.detail || "Okänt fel"));
+            }
+        }
+
+        async function createProject() {
+            const name = document.getElementById('projectName').value;
+            if (!name) return alert("Ange ett namn");
+            const description = document.getElementById('projectDesc').value;
+            const res = await fetch('/api/projects', {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ name, description })
+            });
+            if (res.ok) {
+                hideModal('projectModal');
+                setTimeout(loadData, 500);
+            } else {
+                const err = await res.json();
+                alert("Fel vid skapande: " + (err.detail || "Okänt fel"));
+            }
+        }
+
+        async function selectProject(projectId) {
+            const res = await fetch(`/api/projects/${projectId}`, { headers: getAuthHeaders() });
+            const proj = await res.json();
+            currentProject = proj;
+            renderProjects(projects);
+            const memberCount = Array.isArray(currentProject?.members) ? currentProject.members.length : 0;
+            const projectLabel = currentProject ? `Projekt: ${currentProject.name} (${memberCount} medlemmar)` : "Inget projekt";
+            document.getElementById('linkedLibs').innerText = projectLabel;
+            renderList('librariesList', libraries, 'selectLibrary');
+            renderList('assistantsList', assistants, 'selectAssistant');
+        }
+
+        async function addLibraryToProject(libraryId) {
+            if (!currentProject) return;
+            await fetch(`/api/projects/${currentProject.id}/libraries`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ resource_id: libraryId })
+            });
+            addMessage(`Bibliotek kopplat till projektet ${currentProject.name}.`, 'ai');
+        }
+
+        async function addAssistantToProject(assistantId) {
+            if (!currentProject) return;
+            await fetch(`/api/projects/${currentProject.id}/assistants`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ resource_id: assistantId })
+            });
+            addMessage(`Assistent kopplad till projektet ${currentProject.name}.`, 'ai');
+        }
+
+        async function openProjectMembersModal() {
+            if (!currentProject) {
+                alert("Välj ett projekt först.");
+                return;
+            }
+            showModal('projectMembersModal');
+            await loadProjectMembers();
+        }
+
+        async function loadProjectMembers() {
+            if (!currentProject) return;
+            const res = await fetch(`/api/projects/${currentProject.id}`, { headers: getAuthHeaders() });
+            if (!res.ok) return;
+            const proj = await res.json();
+            currentProject = proj;
+
+            const members = Array.isArray(proj.members) ? proj.members : [];
+            document.getElementById('projectMembersHeader').innerText = `Projekt: ${proj.name} • ${members.length} medlem(mar)`;
+            const currentUserEmail = currentUser?.email?.toLowerCase?.() || "";
+            const listEl = document.getElementById('projectMembersList');
+            if (members.length === 0) {
+                listEl.innerText = "Inga medlemmar.";
+                return;
+            }
+
+            listEl.innerHTML = members.map(m => {
+                const email = m.email || m.user_id || "okänd";
+                const isSelf = String(email).toLowerCase() === currentUserEmail;
+                const isOwner = m.role === "OWNER";
+                return `
+                    <div class="item" style="align-items:flex-start; flex-direction:column; gap:0.4rem;">
+                        <div style="font-size:0.72rem; width:100%; display:flex; justify-content:space-between;">
+                            <span><b>${escapeHtml(email)}</b></span>
+                            <span>${escapeHtml(m.role || "VIEWER")}</span>
+                        </div>
+                        <div class="actions" style="width:100%;">
+                            <select onchange="changeProjectMemberRole('${m.user_id}', this.value)" ${isOwner ? "disabled" : ""} style="max-width:120px;">
+                                <option value="VIEWER" ${m.role === "VIEWER" ? "selected" : ""}>Viewer</option>
+                                <option value="EDITOR" ${m.role === "EDITOR" ? "selected" : ""}>Editor</option>
+                            </select>
+                            <button class="action-btn delete-btn" onclick="removeProjectMember('${m.user_id}')" ${isSelf || isOwner ? "disabled" : ""}>Ta bort</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function inviteProjectMember() {
+            if (!currentProject) return;
+            const email = document.getElementById('inviteEmail').value.trim();
+            const role = document.getElementById('inviteRole').value;
+            if (!email) return alert("Ange e-postadress.");
+
+            const res = await fetch(`/api/projects/${currentProject.id}/invite`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ email, role })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                return alert("Kunde inte bjuda in: " + (data.detail || "Okänt fel"));
+            }
+            document.getElementById('inviteEmail').value = '';
+            await loadProjectMembers();
+            addMessage(`Inbjudan skickad till ${email}.`, 'ai');
+        }
+
+        async function changeProjectMemberRole(userId, role) {
+            if (!currentProject || !userId) return;
+            const res = await fetch(`/api/projects/${currentProject.id}/members/${userId}/role`, {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ role })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                return alert("Kunde inte ändra roll: " + (data.detail || "Okänt fel"));
+            }
+            await loadProjectMembers();
+        }
+
+        async function removeProjectMember(userId) {
+            if (!currentProject || !userId) return;
+            const ok = confirm("Ta bort medlem från projektet?");
+            if (!ok) return;
+            const res = await fetch(`/api/projects/${currentProject.id}/members/${userId}`, {
+                method: 'DELETE',
+                headers: getAuthHeaders()
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                return alert("Kunde inte ta bort medlem: " + (data.detail || "Okänt fel"));
+            }
+            await loadProjectMembers();
+        }
+
+        function selectAssistant(asst) {
+            currentAssistant = asst;
+            currentConversationId = Math.random().toString(36).substring(7); // New conv for session
+            messageSourceMap = {};
+            document.getElementById('activeHeader').innerText = `Aktiv: ${asst.name}`;
+            const libCount = (asst.library_ids || []).length;
+            const projectLabel = currentProject ? `Projekt: ${currentProject.name}` : `${libCount} bibliotek kopplade`;
+            document.getElementById('linkedLibs').innerText = projectLabel;
+            document.getElementById('chatInputArea').style.display = 'flex';
+            document.getElementById('learnBtn').style.display = 'block';
+            document.getElementById('chatContainer').innerHTML = ''; // Clear previous
+            addMessage(`Assistent ${asst.name} redo.`, 'ai');
+            fetchLearnedPrefs();
+        }
+
+        async function fetchConversations() {
+            try {
+                if (!idToken) return;
+                const res = await fetch('/api/chat/conversations', { headers: getAuthHeaders() });
+                const convs = await res.json();
+                const el = document.getElementById('historyList');
+                if (convs.length === 0) {
+                    el.innerText = "Inga tidigare konversationer.";
+                    return;
+                }
+                el.innerHTML = convs.map(c => {
+                    const key = `conv-${c.id}`;
+                    const isPending = pendingDeletes[key];
+                    return `
+                    <div class="item">
+                        <span onclick='event.stopPropagation(); loadConversation("${c.id}")' style="flex:1; cursor:pointer;" title="${c.title}">${c.title.substring(0, 30)}...</span>
+                        <span class="action-btn delete-btn" onclick='event.stopPropagation(); deleteConversation("${c.id}", event)'
+                              style="${isPending ? 'color: #cc0000;' : ''}"
+                              title="Ta bort">${isPending ? 'Säker?' : '×'}</span>
+                    </div>
+                `}).join('');
+            } catch (err) {
+                console.error("Failed to fetch conversations:", err);
+            }
+        }
+
+        async function loadConversation(id) {
+            try {
+                const res = await fetch(`/api/chat/conversations/${id}`, { headers: getAuthHeaders() });
+                const conv = await res.json();
+                currentConversationId = conv.id || id; // Ensure ID is set
+                // Find assistant
+                const asst = assistants.find(a => a.id === conv.assistant_id);
+                if (asst) {
+                    currentAssistant = asst;
+                    document.getElementById('activeHeader').innerText = `Aktiv: ${asst.name}`;
+                    const libCount = (asst.library_ids || []).length;
+                    const projectLabel = currentProject ? `Projekt: ${currentProject.name}` : `${libCount} bibliotek kopplade`;
+                    document.getElementById('linkedLibs').innerText = projectLabel;
+                    document.getElementById('chatInputArea').style.display = 'flex';
+                }
+
+                if (conv.project_id) {
+                    try {
+                        const pres = await fetch(`/api/projects/${conv.project_id}`, { headers: getAuthHeaders() });
+                        if (pres.ok) {
+                            currentProject = await pres.json();
+                            renderProjects(projects);
+                            document.getElementById('linkedLibs').innerText = `Projekt: ${currentProject.name}`;
+                        }
+                    } catch (e) {
+                        console.error("Failed to load project:", e);
+                    }
+                }
+
+                document.getElementById('chatContainer').innerHTML = '';
+                messageSourceMap = {};
+                conv.messages.forEach(m => addMessage(m.content, m.role, m.sources || null, m.matched_images || null));
+            } catch (err) {
+                console.error("Failed to load conversation:", err);
+            }
+        }
+
+        async function deleteConversation(id, event) {
+            const key = `conv-${id}`;
+            const btn = event ? event.target : null;
+
+            if (!pendingDeletes[key]) {
+                pendingDeletes[key] = true;
+                fetchConversations();
+
+                setTimeout(() => {
+                    if (pendingDeletes[key]) {
+                        delete pendingDeletes[key];
+                        fetchConversations();
+                    }
+                }, 3000);
+                return;
+            }
+
+            await fetch(`/api/chat/conversations/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+            delete pendingDeletes[key];
+            fetchConversations();
+        }
+
+        function openAttachmentModal() {
+            if (!currentAssistant || !currentConversationId) {
+                alert("Välj en assistent först.");
+                return;
+            }
+            attachmentMode = true;
+            selectedLibrary = null;
+            showModal('uploadModal');
+            document.getElementById('uploadLabel').innerText = `Bifoga fil till konversationen`;
+            const gdprCb = document.getElementById('gdprNameScrub');
+            if (gdprCb) gdprCb.checked = false;
+        }
+
+        async function fetchLearnedPrefs() {
+            const res = await fetch('/api/chat/learn/status', { headers: getAuthHeaders() });
+            const data = await res.json();
+            const globalRules = data.global_rules || [];
+            const explicitRules = data.explicit_rules || [];
+            const learnedRules = data.learned_rules || [];
+            const adaptiveRules = data.adaptive_rules || [];
+
+            const blocks = [];
+            if (globalRules.length) {
+                blocks.push(`<div><b>Globala regler</b></div>${globalRules.map(r => `<div>• ${escapeHtml(r)}</div>`).join('')}`);
+            }
+            if (explicitRules.length) {
+                blocks.push(`<div style="margin-top:0.4rem;"><b>Dina låsta regler</b></div>${explicitRules.map(r => `<div>• ${escapeHtml(r)}</div>`).join('')}`);
+            }
+            if (learnedRules.length) {
+                blocks.push(`<div style="margin-top:0.4rem;"><b>Inlärd stil</b></div>${learnedRules.map(r => `<div>• ${escapeHtml(r)}</div>`).join('')}`);
+            }
+            if (adaptiveRules.length) {
+                blocks.push(`<div style="margin-top:0.4rem;"><b>Adaptivt minne</b></div>${adaptiveRules.map(r => `<div>• ${escapeHtml(r)}</div>`).join('')}`);
+            }
+
+            if (blocks.length > 0) {
+                document.getElementById('learnedPrefs').innerHTML = blocks.join('');
+            } else {
+                document.getElementById('learnedPrefs').innerText = "Inga preferenser sparade än.";
+            }
+            const txt = document.getElementById('personalRulesInput');
+            if (txt) {
+                txt.value = explicitRules.join('\n');
+            }
+        }
+
+        async function savePersonalRules() {
+            const input = document.getElementById('personalRulesInput');
+            if (!input) return;
+            const rules = input.value
+                .split('\n')
+                .map(r => r.trim())
+                .filter(Boolean);
+
+            const res = await fetch('/api/chat/learn/personal-rules', {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ rules })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert("Kunde inte spara personliga regler: " + (data.detail || "Okänt fel"));
+                return;
+            }
+            await fetchLearnedPrefs();
+        }
+
+        async function learnFromChat() {
+            if (!currentConversationId) return;
+            const btn = document.getElementById('learnBtn');
+            const originalText = btn.innerText;
+            btn.innerText = "Analyserar...";
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`/api/chat/learn/${currentConversationId}`, {
+                    method: 'POST',
+                    headers: getAuthHeaders()
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    alert("Systemet har nu analyserat din stil och sparat följande regler: \n- " + data.learned_rules.join('\n- '));
+                    await fetchLearnedPrefs();
+                } else {
+                    alert("Kunde inte lära från konversation: " + (data.detail || "Okänt fel"));
+                }
+            } catch (err) {
+                console.error("Learn error:", err);
+                alert("Ett oväntat fel uppstod vid analys av konversationen.");
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function uploadToLibrary(event) {
+            if (!attachmentMode && !selectedLibrary) return;
+            const fileInput = document.getElementById('docInput');
+            if (fileInput.files.length === 0) {
+                alert("Välj minst en fil först!");
+                return;
+            }
+
+            const files = Array.from(fileInput.files);
+            const vision = document.getElementById('interpretImages').checked;
+            const gdprNameScrub = document.getElementById('gdprNameScrub')?.checked;
+
+            const btn = event ? event.target : document.querySelector('#uploadModal button');
+            const originalText = btn.innerText;
+            btn.innerText = `Laddar upp 0/${files.length}...`;
+            btn.disabled = true;
+
+            let successCount = 0;
+            let errorMessages = [];
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                btn.innerText = `Laddar upp ${i + 1}/${files.length}...`;
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const endpoint = attachmentMode
+                        ? `/api/documents/conversation/${currentConversationId}/upload?interpret_images=${vision}&gdpr_name_scrub=${gdprNameScrub ? "true" : "false"}`
+                        : `/api/documents/library/${selectedLibrary.id}/upload?interpret_images=${vision}&gdpr_name_scrub=${gdprNameScrub ? "true" : "false"}`;
+                    const res = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: getAuthHeaders(null),
+                        body: formData
+                    });
+
+                    if (res.ok) {
+                        successCount++;
+                    } else {
+                        const error = await res.json();
+                        errorMessages.push(`${file.name}: ${error.detail || 'Okänt fel'}`);
+                    }
+                } catch (err) {
+                    console.error("Upload error:", err);
+                    errorMessages.push(`${file.name}: Nätverksfel`);
+                }
+            }
+
+            btn.innerText = originalText;
+            btn.disabled = false;
+            fileInput.value = '';
+            const gdprCb = document.getElementById('gdprNameScrub');
+            if (gdprCb) gdprCb.checked = false;
+            document.getElementById('fileCount').innerText = '';
+
+            if (successCount > 0) {
+                hideModal('uploadModal');
+                const msg = attachmentMode
+                    ? `${successCount} fil(er) har bifogats till konversationen och bearbetas nu i bakgrunden.${gdprNameScrub ? " GDPR-namntvätt är aktiverad." : ""}`
+                    : `${successCount} fil(er) har tagits emot och bearbetas nu i bakgrunden.${gdprNameScrub ? " GDPR-namntvätt är aktiverad." : ""} Du kan fortsätta använda assistenten under tiden.`;
+                addMessage(msg, 'ai');
+            }
+
+            if (errorMessages.length > 0) {
+                alert("Fel vid uppladdning:\n" + errorMessages.join("\n"));
+            }
+        }
+
+        async function loadDocuments(libId, libName) {
+            document.getElementById('docsModalLabel').innerText = `Filer i ${libName}`;
+            try {
+                const res = await fetch(`/api/libraries/${libId}/documents`, { headers: getAuthHeaders() });
+                const docs = await res.json();
+
+                if (docs.length === 0) {
+                    document.getElementById('docsTableBody').innerHTML = '<tr><td colspan="6" style="padding: 1rem; text-align: center;">Inga filer uppladdade än.</td></tr>';
+                    return;
+                }
+
+                document.getElementById('docsTableBody').innerHTML = docs.map(d => {
+                    let statusColor = '#666';
+                    let statusText = d.status || 'Klar'; // Fallback for old docs
+
+                    if (statusText === 'processing') { statusText = 'Bearbetas'; statusColor = '#ffa500'; }
+                    else if (statusText === 'completed') { statusText = 'Klar'; statusColor = '#008000'; }
+                    else if (statusText === 'failed') { statusText = 'Fel'; statusColor = '#ff0000'; }
+
+                    const progress = typeof d.progress === "number" ? d.progress : null;
+                    const total = d.total_chunks || 0;
+                    const processed = d.processed_chunks || 0;
+                    const bar = progress !== null
+                        ? `<div style="background:#eee; height:6px; width:100%; border:1px solid #ccc;">
+                               <div style="background:#000; height:6px; width:${progress}%;"></div>
+                           </div>
+                           <div style="font-size:0.6rem; color:#666;">${progress}% (${processed}/${total})</div>`
+                        : `<div style="font-size:0.6rem; color:#666;">—</div>`;
+
+                    const error = d.error ? `<div style="font-size:0.6rem; color:#c00; margin-top:4px;">${d.error}</div>` : '';
+                    const gdprEnabled = !!d.gdpr_name_scrub;
+                    const gdprMode = d.gdpr_scrub_mode || (gdprEnabled ? "NAMES_TO_DOCUMENT_CARD" : "—");
+                    const gdprRepl = Number.isFinite(d.gdpr_scrub_replacements) ? d.gdpr_scrub_replacements : 0;
+                    const gdprCards = Number.isFinite(d.gdpr_scrub_cards_created) ? d.gdpr_scrub_cards_created : 0;
+                    const gdprStatus = d.gdpr_scrub_status || (gdprEnabled ? "processing" : "off");
+                    const gdprProvider = d.gdpr_scrub_provider || "-";
+                    const gdprModel = d.gdpr_scrub_model || "-";
+                    const gdprBy = d.gdpr_scrub_initiated_by || "-";
+                    const gdprAt = d.gdpr_scrub_at ? new Date(d.gdpr_scrub_at).toLocaleString('sv-SE') : "-";
+                    const gdprText = gdprEnabled
+                        ? `<div style="font-size:0.62rem;"><b>På</b> (${gdprMode})</div>
+                           <div style="font-size:0.6rem; color:#666;">Status: ${gdprStatus}</div>
+                           <div style="font-size:0.6rem; color:#666;">Ersättningar: ${gdprRepl}, kort: ${gdprCards}</div>
+                           <div style="font-size:0.6rem; color:#666;">${gdprProvider} / ${gdprModel}</div>
+                           <div style="font-size:0.6rem; color:#666;">Initierad av: ${gdprBy}</div>
+                           <div style="font-size:0.6rem; color:#666;">Tid: ${gdprAt}</div>`
+                        : `<div style="font-size:0.62rem; color:#666;">Av</div>`;
+
+                    return `
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 0.5rem;">${d.filename}</td>
+                        <td style="padding: 0.5rem;">${new Date(d.uploaded_at).toLocaleString('sv-SE')}</td>
+                        <td style="padding: 0.5rem;">${d.interpret_images ? `Ja (${d.images_indexed})` : 'Nej'}</td>
+                        <td style="padding: 0.5rem;">${gdprText}</td>
+                        <td style="padding: 0.5rem;"><span style="color: ${statusColor}; font-weight: bold;">${statusText}</span>${error}</td>
+                        <td style="padding: 0.5rem;">${bar}</td>
+                    </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error("Failed to load documents:", err);
+                document.getElementById('docsTableBody').innerHTML = '<tr><td colspan="6" style="padding: 1rem; text-align: center; color: red;">Kunde inte ladda filer.</td></tr>';
+            }
+        }
+
+        async function showDocuments(libId, libName) {
+            currentDocsLibId = libId;
+            currentDocsLibName = libName;
+            document.getElementById('docsTableBody').innerHTML = '<tr><td colspan="6" style="padding: 1rem; text-align: center;">Laddar filer...</td></tr>';
+            showModal('docsModal');
+            await loadDocuments(libId, libName);
+            if (docsRefreshTimer) clearInterval(docsRefreshTimer);
+            docsRefreshTimer = setInterval(() => {
+                if (currentDocsLibId && currentDocsLibName) {
+                    loadDocuments(currentDocsLibId, currentDocsLibName);
+                }
+            }, 5000);
+        }
+
+        function escapeHtml(text) {
+            return String(text || "")
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function applyInlineMarkdown(text) {
+            return text
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        }
+
+        function renderMarkdownToHtml(markdown) {
+            const lines = String(markdown || "").split(/\r?\n/);
+            const html = [];
+            let inUl = false;
+            let inOl = false;
+
+            const closeLists = () => {
+                if (inUl) {
+                    html.push('</ul>');
+                    inUl = false;
+                }
+                if (inOl) {
+                    html.push('</ol>');
+                    inOl = false;
+                }
+            };
+
+            for (const rawLine of lines) {
+                const line = rawLine.trim();
+                if (!line) {
+                    closeLists();
+                    continue;
+                }
+
+                if (line.startsWith('### ')) {
+                    closeLists();
+                    html.push(`<h3>${applyInlineMarkdown(escapeHtml(line.slice(4)))}</h3>`);
+                    continue;
+                }
+                if (line.startsWith('## ')) {
+                    closeLists();
+                    html.push(`<h2>${applyInlineMarkdown(escapeHtml(line.slice(3)))}</h2>`);
+                    continue;
+                }
+                if (line.startsWith('# ')) {
+                    closeLists();
+                    html.push(`<h1>${applyInlineMarkdown(escapeHtml(line.slice(2)))}</h1>`);
+                    continue;
+                }
+                if (/^[-*]\s+/.test(line)) {
+                    if (inOl) {
+                        html.push('</ol>');
+                        inOl = false;
+                    }
+                    if (!inUl) {
+                        html.push('<ul>');
+                        inUl = true;
+                    }
+                    html.push(`<li>${applyInlineMarkdown(escapeHtml(line.replace(/^[-*]\s+/, "")))}</li>`);
+                    continue;
+                }
+                if (/^\d+\.\s+/.test(line)) {
+                    if (inUl) {
+                        html.push('</ul>');
+                        inUl = false;
+                    }
+                    if (!inOl) {
+                        html.push('<ol>');
+                        inOl = true;
+                    }
+                    html.push(`<li>${applyInlineMarkdown(escapeHtml(line.replace(/^\d+\.\s+/, "")))}</li>`);
+                    continue;
+                }
+
+                closeLists();
+                html.push(`<p>${applyInlineMarkdown(escapeHtml(line))}</p>`);
+            }
+
+            closeLists();
+            return html.join('') || `<p>${escapeHtml(markdown)}</p>`;
+        }
+
+        function normalizeSourceRef(ref) {
+            if (!ref) return "";
+            const m = String(ref).match(/S\d+/i);
+            return m ? m[0].toUpperCase() : "";
+        }
+
+        function findSourceByRef(sources, ref) {
+            const target = normalizeSourceRef(ref);
+            if (!target) return null;
+            return (sources || []).find((s) => normalizeSourceRef((s.metadata || {}).source_ref || s.source_ref) === target) || null;
+        }
+
+        function linkSourceRefsInHtml(contentHtml, sources, messageId) {
+            if (!sources || sources.length === 0 || !messageId) return contentHtml;
+            const refs = new Set();
+            sources.forEach((s) => {
+                const ref = normalizeSourceRef((s.metadata || {}).source_ref || s.source_ref);
+                if (ref) refs.add(ref);
+            });
+            let out = contentHtml;
+            refs.forEach((ref) => {
+                const pattern = new RegExp(`\\b(${ref})\\b`, "g");
+                out = out.replace(
+                    pattern,
+                    `<button class="source-ref-link" onclick="openSourceInspectorFromMessage('${messageId}', '${ref}')">$1</button>`
+                );
+            });
+            return out;
+        }
+
+        function renderSourcesHtml(sources, messageId) {
+            if (!sources || sources.length === 0) return "";
+            const unique = [];
+            const seen = new Set();
+            for (const src of sources) {
+                const meta = src.metadata || {};
+                const key = `${meta.source_ref || ''}|${meta.filename || ''}|${meta.page || ''}|${meta.library_id || ''}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    unique.push(src);
+                }
+            }
+            const maxItems = 8;
+            const items = unique.slice(0, maxItems).map((src) => {
+                const meta = src.metadata || {};
+                const ref = meta.source_ref || src.source_ref || "-";
+                const filename = meta.filename || "Okänd fil";
+                const page = meta.page ? `sida ${meta.page}` : "okänd sida";
+                const libName = meta.library_name || "Okänt bibliotek";
+                const libType = meta.library_type || src.type || "OKÄND";
+                const libPriority = (meta.library_priority !== undefined && meta.library_priority !== null)
+                    ? ` prio ${meta.library_priority}${meta.library_priority_source === "assistant_override" ? " (assistent)" : ""}`
+                    : "";
+                const snippet = escapeHtml((src.content || "").slice(0, 180)).replace(/\n/g, " ");
+                return `
+                    <div class="source-item">
+                        <div class="source-meta"><b>${escapeHtml(ref)}</b> • ${escapeHtml(filename)} • ${escapeHtml(page)} • ${escapeHtml(libName)} (${escapeHtml(libType)}${escapeHtml(libPriority)})
+                        ${messageId ? `<button class="source-ref-link" onclick="openSourceInspectorFromMessage('${messageId}', '${escapeHtml(ref)}')">Öppna</button>` : ""}</div>
+                        <div class="source-snippet">${snippet}${(src.content || "").length > 180 ? "..." : ""}</div>
+                    </div>
+                `;
+            }).join("");
+            const hiddenCount = unique.length > maxItems ? `<div class="source-meta">+${unique.length - maxItems} fler källor i underlaget</div>` : "";
+            return `<div class="source-list">${items}${hiddenCount}</div>`;
+        }
+
+        function renderImageCardsHtml(images) {
+            if (!images || images.length === 0) return "";
+            const cards = images.slice(0, 6).map((img) => {
+                const url = escapeHtml(img.url || "");
+                const description = escapeHtml((img.description || "").slice(0, 80));
+                const source = escapeHtml(img.source_document || "Okänd källa");
+                const page = escapeHtml(String(img.page || "-"));
+                const sectionHint = escapeHtml(((img.section_hints || [])[0] || ""));
+                const tags = escapeHtml((img.tags || []).slice(0, 3).join(", "));
+                return `
+                    <a class="image-card" href="${url}" target="_blank" rel="noopener noreferrer">
+                        <img src="${url}" alt="${description}">
+                        <div class="img-meta">${description}</div>
+                        <div class="img-meta">${source} • sida ${page}</div>
+                        ${sectionHint ? `<div class="img-meta">Tips: ${sectionHint}</div>` : ""}
+                        ${tags ? `<div class="img-meta">Taggar: ${tags}</div>` : ""}
+                    </a>
+                `;
+            }).join("");
+            return `<div class="image-list">${cards}</div>`;
+        }
+
+        function formatApiError(detail, fallbackMessage) {
+            if (!detail) return fallbackMessage;
+            if (typeof detail === 'string') return detail;
+            if (typeof detail === 'object') {
+                const msg = detail.message || detail.detail || fallbackMessage;
+                const retry = detail.retry_after_seconds;
+                if (retry) {
+                    return `${msg} Försök igen om cirka ${retry} sekunder.`;
+                }
+                return msg;
+            }
+            return fallbackMessage;
+        }
+
+        async function submitBlockComment(fullText, blockText, comment, fallbackSources = null, fallbackImages = null) {
+            const waitEl = addMessage("Bearbetar markerat stycke utan att skriva om hela texten...", 'ai', null, null, false);
+            try {
+                const res = await fetch('/api/chat/comment-edit', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        assistant_id: currentAssistant.id,
+                        conversation_id: currentConversationId,
+                        full_text: fullText,
+                        block_text: blockText,
+                        comment: comment.trim(),
+                        project_id: currentProject ? currentProject.id : null
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(formatApiError(data.detail, "Kunde inte redigera markerad text."));
+                }
+
+                if (waitEl && waitEl.parentNode) waitEl.remove();
+                const updatedSources = data.sources || fallbackSources || [];
+                const updatedImages = data.matched_images || fallbackImages || [];
+                addMessage(data.answer || fullText, 'ai', updatedSources, updatedImages);
+                lastResponse = {
+                    ...(lastResponse || {}),
+                    query: (lastResponse && lastResponse.query) ? lastResponse.query : "Styckekommentar",
+                    answer: data.answer || fullText,
+                    sources: updatedSources,
+                    matched_images: updatedImages
+                };
+                document.getElementById('exportBtn').disabled = false;
+                fetchConversations();
+            } catch (err) {
+                console.error("Block comment error:", err);
+                if (waitEl && waitEl.parentNode) waitEl.remove();
+                addMessage("Ett fel uppstod vid styckesbearbetning: " + err.message, 'ai');
+            }
+        }
+
+        function attachInlineCommentButtons(messageElement, fullText, sources = null, matchedImages = null) {
+            if (!messageElement || !fullText) return;
+            const contentRoot = messageElement.querySelector('.message-content');
+            if (!contentRoot) return;
+            const blocks = contentRoot.querySelectorAll('p, li');
+            let count = 0;
+            blocks.forEach((block) => {
+                const blockText = (block.innerText || "").trim();
+                if (blockText.length < 35 || blockText.length > 1400) return;
+                if (count >= 10) return;
+                count += 1;
+                block.classList.add('commentable-block');
+                const btn = document.createElement('button');
+                btn.className = 'inline-comment-btn';
+                btn.title = 'Kommentera detta stycke';
+                btn.innerText = '💬';
+                btn.onclick = async (e) => {
+                    e.stopPropagation();
+                    const comment = prompt("Hur vill du att detta stycke ska ändras?");
+                    if (!comment || !comment.trim()) return;
+                    await submitBlockComment(fullText, blockText, comment, sources, matchedImages);
+                };
+                block.appendChild(btn);
+            });
+        }
+
+        async function openBlockCommentFlow(messageElement, fullText, fallbackSources = null, fallbackImages = null) {
+            if (!currentAssistant || !currentConversationId) {
+                alert("Välj en assistent och en aktiv konversation först.");
+                return;
+            }
+            if (!fullText || fullText.trim().length < 20) {
+                alert("Det finns inget tillräckligt textunderlag att kommentera.");
+                return;
+            }
+
+            const selection = window.getSelection ? window.getSelection() : null;
+            const selectedText = (selection && selection.toString ? selection.toString() : "").trim();
+            if (!selectedText) {
+                alert("Markera först den text/mening du vill justera.");
+                return;
+            }
+            if (selectedText.length < 8) {
+                alert("Markera ett tydligare stycke eller mening (minst några ord).");
+                return;
+            }
+            if (selection && selection.anchorNode && !messageElement.contains(selection.anchorNode)) {
+                alert("Markeringen måste vara i samma AI-svar som du kommenterar.");
+                return;
+            }
+            if (selection && selection.focusNode && !messageElement.contains(selection.focusNode)) {
+                alert("Markeringen måste vara i samma AI-svar som du kommenterar.");
+                return;
+            }
+
+            const comment = prompt("Hur vill du att markerad text ska ändras?");
+            if (!comment || !comment.trim()) return;
+            await submitBlockComment(fullText, selectedText, comment, fallbackSources, fallbackImages);
+        }
+
+        function openSourceInspectorFromMessage(messageId, preferredRef = null) {
+            const sources = messageSourceMap[messageId] || [];
+            if (!sources.length) {
+                alert("Inga källor tillgängliga för detta svar.");
+                return;
+            }
+            sourceInspectorMessageId = messageId;
+            showModal('sourceInspectorModal');
+            renderSourceInspector(sources, preferredRef);
+        }
+
+        function renderSourceInspector(sources, preferredRef = null) {
+            const listEl = document.getElementById('sourceInspectorList');
+            const detailEl = document.getElementById('sourceInspectorDetail');
+            const headerEl = document.getElementById('sourceInspectorHeader');
+            if (!listEl || !detailEl || !headerEl) return;
+
+            if (!sources || !sources.length) {
+                listEl.innerHTML = "";
+                detailEl.innerText = "Välj en källa i listan.";
+                headerEl.innerText = "Inga källor.";
+                return;
+            }
+
+            const selected = findSourceByRef(sources, preferredRef) || sources[0];
+            const selectedRef = normalizeSourceRef((selected.metadata || {}).source_ref || selected.source_ref);
+            headerEl.innerText = `Källa ${selectedRef || "-"} • ${selected.metadata?.filename || "Okänd fil"}`;
+
+            listEl.innerHTML = sources.map((s) => {
+                const meta = s.metadata || {};
+                const ref = normalizeSourceRef(meta.source_ref || s.source_ref) || "-";
+                const filename = meta.filename || "Okänd fil";
+                const isActive = ref === selectedRef;
+                return `
+                    <div class="inspector-item ${isActive ? "active" : ""}" onclick="openSourceInspectorFromMessage('${sourceInspectorMessageId}', '${ref}')">
+                        <div><b>${escapeHtml(ref)}</b></div>
+                        <div>${escapeHtml(filename)}</div>
+                    </div>
+                `;
+            }).join('');
+
+            const meta = selected.metadata || {};
+            const lines = [
+                `Käll-ID: ${selectedRef || "-"}`,
+                `Fil: ${meta.filename || "-"}`,
+                `Bibliotek: ${meta.library_name || "-"} (${meta.library_type || selected.type || "-"})`,
+                `Biblioteksprioritet: ${meta.library_priority ?? "-"}${meta.library_priority_source === "assistant_override" ? " (assistentprofil)" : ""}`,
+                `Sida: ${meta.page || "-"}`,
+                `Doc-ID: ${meta.doc_id || "-"}`,
+                "",
+                "Textutdrag:",
+                selected.content || ""
+            ];
+            detailEl.innerText = lines.join("\n");
+        }
+
+        // Chat
+        document.getElementById('sendBtn').onclick = handleSend;
+        document.getElementById('userInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleSend();
+            }
+        });
+
+        async function handleSend() {
+            // Backend handles auth (dev fallback in development mode)
+            const query = document.getElementById('userInput').value;
+            if (!query || !currentAssistant) return;
+            const responseMode = (document.getElementById('responseMode')?.value || 'auto');
+            const targetPagesInput = document.getElementById('targetPages')?.value;
+            const targetWordsInput = document.getElementById('targetWords')?.value;
+            const targetPages = targetPagesInput ? parseInt(targetPagesInput, 10) : null;
+            const targetWords = targetWordsInput ? parseInt(targetWordsInput, 10) : null;
+            const longformChecked = !!document.getElementById('longformMode')?.checked;
+            const longform = longformChecked || (targetPages && targetPages >= 5) || (targetWords && targetWords >= 1200);
+            const suggestImages = !!document.getElementById('suggestImages')?.checked;
+            const sendBtn = document.getElementById('sendBtn');
+
+            addMessage(query, 'user');
+            document.getElementById('userInput').value = '';
+            sendBtn.disabled = true;
+            const loadingEl = addMessage("Assistenten analyserar källor och strukturerar svaret...", 'ai', null, null, false);
+
+            try {
+                const res = await fetch('/api/chat/ask', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        assistant_id: currentAssistant.id,
+                        conversation_id: currentConversationId,
+                        query: query,
+                        show_citations: document.getElementById('showCitations').checked,
+                        project_id: currentProject ? currentProject.id : null,
+                        target_pages: targetPages && targetPages > 0 ? targetPages : null,
+                        target_words: targetWords && targetWords >= 300 ? targetWords : null,
+                        longform: longform ? true : null,
+                        suggest_images: suggestImages,
+                        response_mode: responseMode
+                    })
+                });
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    throw new Error(formatApiError(errorData.detail, "Misslyckades att skicka meddelande"));
+                }
+                const data = await res.json();
+                if (loadingEl && loadingEl.parentNode) loadingEl.remove();
+                lastResponse = data;
+                lastResponse.query = query;
+                addMessage(data.answer || "Inget svar returnerades", 'ai', data.sources, data.matched_images);
+                document.getElementById('exportBtn').disabled = false;
+                fetchConversations();
+            } catch (err) {
+                console.error("Chat error:", err);
+                if (loadingEl && loadingEl.parentNode) loadingEl.remove();
+                addMessage("Ett fel uppstod: " + err.message, 'ai');
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+
+        function addMessage(text, role, sources = null, matchedImages = null, showCommentButton = true) {
+            if (text === undefined || text === null) text = "...";
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            div.dataset.messageId = messageId;
+            if (role === 'ai' && sources && sources.length > 0) {
+                messageSourceMap[messageId] = sources;
+            }
+
+            let contentHtml = role === 'ai'
+                ? renderMarkdownToHtml(text)
+                : `<p>${escapeHtml(text)}</p>`;
+            if (role === 'ai' && sources && sources.length > 0) {
+                contentHtml = linkSourceRefsInHtml(contentHtml, sources, messageId);
+            }
+            div.innerHTML = `<div class="role-tag">${role.toUpperCase()}</div><div class="message-content">${contentHtml}</div>`;
+            if (role === 'ai' && showCommentButton) {
+                attachInlineCommentButtons(div, text, sources, matchedImages);
+            }
+
+            if (sources && sources.length > 0) {
+                const src = document.createElement('div');
+                src.className = 'sources';
+                src.innerHTML = `<div><b>Källor (${sources.length}):</b></div>${renderSourcesHtml(sources, messageId)}`;
+                div.appendChild(src);
+            }
+            if (matchedImages && matchedImages.length > 0 && role === 'ai') {
+                const imgWrap = document.createElement('div');
+                imgWrap.className = 'sources';
+                imgWrap.innerHTML = `<div><b>Relevanta bilder (${matchedImages.length}):</b></div>${renderImageCardsHtml(matchedImages)}`;
+                div.appendChild(imgWrap);
+            }
+
+            // Optional: Comment button
+            if (role === 'ai' && showCommentButton) {
+                const btn = document.createElement('button');
+                btn.className = 'comment-btn';
+                btn.innerText = "Kommentera & Justera";
+                btn.onclick = () => {
+                    document.getElementById('userInput').focus();
+                    document.getElementById('userInput').value = "Angående svaret ovan: ";
+                };
+                div.appendChild(btn);
+
+                const blockBtn = document.createElement('button');
+                blockBtn.className = 'comment-btn';
+                blockBtn.innerText = "Kommentera Markerad Text";
+                blockBtn.onclick = () => openBlockCommentFlow(div, text, sources, matchedImages);
+                div.appendChild(blockBtn);
+            }
+
+            document.getElementById('chatContainer').appendChild(div);
+            document.getElementById('chatContainer').scrollTop = document.getElementById('chatContainer').scrollHeight;
+            return div;
+        }
+
+        // Template Upload
+        document.getElementById('templateInput').onchange = async (e) => {
+            const file = e.target.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            await fetch('/api/templates/upload', {
+                method: 'POST',
+                headers: getAuthHeaders(null),
+                body: formData
+            });
+            loadData();
+        };
+
+        // File count display for multi-file upload
+        document.getElementById('docInput').onchange = (e) => {
+            const count = e.target.files.length;
+            document.getElementById('fileCount').innerText = count > 0 ? `${count} fil(er) valda` : '';
+        };
+        document.getElementById('responseMode').addEventListener('change', (e) => {
+            const mode = e.target.value;
+            const longformEl = document.getElementById('longformMode');
+            const suggestImagesEl = document.getElementById('suggestImages');
+            const targetWordsEl = document.getElementById('targetWords');
+            const targetPagesEl = document.getElementById('targetPages');
+
+            if (mode === 'fast') {
+                if (longformEl) longformEl.checked = false;
+                if (suggestImagesEl) suggestImagesEl.checked = false;
+                if (targetPagesEl) targetPagesEl.value = '';
+                if (targetWordsEl && !targetWordsEl.value) targetWordsEl.placeholder = 'Målord (snabbt: lämna tom)';
+            } else if (mode === 'deep') {
+                if (longformEl) longformEl.checked = true;
+                if (suggestImagesEl) suggestImagesEl.checked = true;
+                if (targetWordsEl && !targetWordsEl.value) targetWordsEl.placeholder = 'Målord (t.ex. 1800)';
+            } else {
+                if (targetWordsEl) targetWordsEl.placeholder = 'Målord (t.ex. 1800)';
+            }
+        });
+        document.getElementById('asstLibs').addEventListener('change', () => {
+            renderAssistantPriorityProfile(getAssistantPriorityDraft());
+        });
+
+        // Export
+        document.getElementById('exportBtn').onclick = async () => {
+            const includeImages = document.getElementById('includeImagesExport')?.checked;
+            await fetch('/api/export/word', {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    query: lastResponse.query,
+                    answer: lastResponse.answer,
+                    sources: lastResponse.sources,
+                    assistant_id: currentAssistant.id,
+                    matched_images: includeImages ? lastResponse.matched_images : []
+                })
+            }).then(r => r.blob()).then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url;
+                a.download = "Textbehandlaren_Export.docx";
+                a.click();
+            });
+        };
+
+        // Admin Dash
+        async function loadAdminGdprAudit() {
+            const projectId = document.getElementById('auditProjectFilter')?.value || "";
+            const libraryId = document.getElementById('auditLibraryFilter')?.value || "";
+            const status = document.getElementById('auditStatusFilter')?.value || "all";
+            const days = parseInt(document.getElementById('auditDaysFilter')?.value || "90", 10) || 90;
+            const params = new URLSearchParams();
+            if (projectId) params.set('project_id', projectId);
+            if (libraryId) params.set('library_id', libraryId);
+            if (status) params.set('status', status);
+            params.set('days', String(days));
+            params.set('limit', '200');
+
+            const el = document.getElementById('gdprAuditList');
+            el.innerText = "Laddar GDPR-audit...";
+            try {
+                const res = await fetch(`/api/admin/gdpr-audit?${params.toString()}`, { headers: getAuthHeaders() });
+                const data = await res.json();
+                if (!res.ok) {
+                    el.innerText = "Kunde inte läsa auditdata: " + (data.detail || "Okänt fel");
+                    return;
+                }
+                const rows = data.rows || [];
+                if (!rows.length) {
+                    el.innerText = "Inga auditträffar för vald filtrering.";
+                    return;
+                }
+                el.innerHTML = rows.map((r) => `
+                    <div style="border-bottom:1px solid #eee; padding:0.35rem 0;">
+                        <div><b>${escapeHtml(r.filename || "Okänd fil")}</b> • ${escapeHtml(r.library_name || "Okänt bibliotek")}</div>
+                        <div>Status: ${escapeHtml(r.gdpr_scrub_status || "-")} • Ersättningar: ${escapeHtml(String(r.gdpr_scrub_replacements || 0))} • Kort: ${escapeHtml(String(r.gdpr_scrub_cards_created || 0))}</div>
+                        <div>Provider/modell: ${escapeHtml(r.gdpr_scrub_provider || "-")} / ${escapeHtml(r.gdpr_scrub_model || "-")}</div>
+                        <div>Initierad av: ${escapeHtml(r.gdpr_scrub_initiated_by || "-")} • Tid: ${r.gdpr_scrub_at ? new Date(r.gdpr_scrub_at).toLocaleString('sv-SE') : "-"}</div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error("GDPR audit load failed:", err);
+                el.innerText = "Kunde inte läsa auditdata.";
+            }
+        }
+
+        async function loadAdminLlmRouting() {
+            try {
+                const res = await fetch('/api/admin/llm-routing', { headers: getAuthHeaders() });
+                const data = await res.json();
+                if (!res.ok) {
+                    console.error("LLM routing load failed:", data);
+                    return;
+                }
+                const allowed = data.allowed_models || [];
+                const globalSelect = document.getElementById('adminGlobalModel');
+                const fallbackSelect = document.getElementById('adminFallbackModel');
+                if (!globalSelect || !fallbackSelect) return;
+
+                const optionsHtml = allowed.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+                globalSelect.innerHTML = optionsHtml;
+                fallbackSelect.innerHTML = optionsHtml;
+                globalSelect.value = data.global_model || "";
+                fallbackSelect.value = data.fallback_model || "";
+                const cb = document.getElementById('adminAllowAsstModelOverride');
+                if (cb) cb.checked = !!data.allow_assistant_override;
+            } catch (err) {
+                console.error("Failed to load admin LLM routing:", err);
+            }
+        }
+
+        async function saveAdminLlmRouting() {
+            const globalModel = document.getElementById('adminGlobalModel')?.value;
+            const fallbackModel = document.getElementById('adminFallbackModel')?.value;
+            const allowOverride = !!document.getElementById('adminAllowAsstModelOverride')?.checked;
+            if (!globalModel || !fallbackModel) {
+                alert("Välj både global modell och fallbackmodell.");
+                return;
+            }
+            const res = await fetch('/api/admin/llm-routing', {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    global_model: globalModel,
+                    fallback_model: fallbackModel,
+                    allow_assistant_override: allowOverride
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert("Kunde inte spara LLM-styrning: " + (data.detail || "Okänt fel"));
+                return;
+            }
+            alert("LLM-styrning uppdaterad.");
+            await loadData();
+        }
+
+        async function showAdminDashboard() {
+            if (currentUserProfile?.role !== "SUPERADMIN") {
+                alert("Du saknar behörighet för adminläget.");
+                return;
+            }
+            showModal('adminModal');
+            const stats = await fetch('/api/admin/stats', { headers: getAuthHeaders() }).then(r => r.json());
+            document.getElementById('statAssts').innerText = stats.total_assistants;
+            document.getElementById('statLibs').innerText = stats.total_libraries;
+
+            const resources = await fetch('/api/admin/all-resources', { headers: getAuthHeaders() }).then(r => r.json());
+            document.getElementById('allResourcesList').innerHTML = `
+                <div style="margin-top:0.5rem;"><b>Assistenter:</b> ${resources.assistants.map(a => `<div style="margin-left:5px;">• ${a.name} (ID: ${a.id.substring(0, 8)})</div>`).join('')}</div>
+                <div style="margin-top:0.5rem;"><b>Bibliotek:</b> ${resources.libraries.map(l => `<div style="margin-left:5px;">• ${l.name} (Typ: ${l.library_type})</div>`).join('')}</div>
+            `;
+
+            const projectSelect = document.getElementById('auditProjectFilter');
+            const librarySelect = document.getElementById('auditLibraryFilter');
+            if (projectSelect) {
+                const projects = resources.projects || [];
+                projectSelect.innerHTML = `<option value="">Alla</option>` + projects
+                    .map(p => `<option value="${p.id}">${escapeHtml(p.name || p.id)}</option>`).join('');
+            }
+            if (librarySelect) {
+                const libs = resources.libraries || [];
+                librarySelect.innerHTML = `<option value="">Alla</option>` + libs
+                    .map(l => `<option value="${l.id}">${escapeHtml(l.name || l.id)}</option>`).join('');
+            }
+            await loadAdminGdprAudit();
+            await loadAdminLlmRouting();
+        }
+
+        loadData();
+    </script>
+    <!-- Login Modal -->
+    <div id="login-modal" class="box"
+        style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%); background:white; z-index:200; width:350px; box-shadow: 0 0 100px rgba(0,0,0,0.5); flex-direction: column; gap: 1rem; padding: 2rem;">
+        <label style="font-size: 1.2rem; margin-bottom: 1rem;">Logga in</label>
+
+        <form onsubmit="handleLogin(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+            <input type="email" id="login-email" placeholder="E-post" required>
+            <input type="password" id="login-password" placeholder="Lösenord" required>
+            <button type="submit">Logga in</button>
+        </form>
+
+        <div style="text-align: center; font-size: 0.8rem; margin: 0.5rem 0;">eller</div>
+
+        <button onclick="loginWithGoogle()" style="background: white; color: black;">Logga in med Google</button>
+
+        <hr style="margin: 1rem 0;">
+
+        <label>Registrera nytt konto</label>
+        <form onsubmit="handleRegister(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+            <input type="email" id="register-email" placeholder="E-post" required>
+            <input type="password" id="register-password" placeholder="Lösenord" required>
+            <button type="submit" style="background: none; color: black;">Skapa konto</button>
+        </form>
+
+        <button onclick="hideLoginModal()"
+            style="background:none; color:var(--muted); margin-top: 1rem; border: none;">Avbryt</button>
+    </div>
+
+</body>
+
+</html>

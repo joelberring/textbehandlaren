@@ -1,0 +1,29 @@
+# Environment & secrets
+.env
+*.json
+!package.json
+!package-lock.json
+service-account.json
+*-firebase-adminsdk-*.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local databases
+chroma_db/
+*.db
+
+# OS files
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Temp/output
+exports/
+temp_uploads/
+*.log
