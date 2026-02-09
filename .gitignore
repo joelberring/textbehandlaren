@@ -3,6 +3,7 @@
 *.json
 !package.json
 !package-lock.json
+!vercel.json
 service-account.json
 *-firebase-adminsdk-*.json
 

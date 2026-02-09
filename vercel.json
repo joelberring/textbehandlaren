@@ -1,0 +1,25 @@
+{
+    "builds": [
+        {
+            "src": "backend/app/main.py",
+            "use": "@vercel/python",
+            "config": {
+                "runtime": "python3.11"
+            }
+        }
+    ],
+    "routes": [
+        {
+            "src": "/api/(.*)",
+            "dest": "backend/app/main.py"
+        },
+        {
+            "src": "/static/(.*)",
+            "dest": "backend/app/static/$1"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "backend/app/main.py"
+        }
+    ]
+}
