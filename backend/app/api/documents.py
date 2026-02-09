@@ -16,8 +16,11 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, Te
 
 router = APIRouter()
 
-UPLOAD_DIR = "temp_uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_DIR = "/tmp/temp_uploads"
+try:
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+except Exception as e:
+    print(f"Warning: Could not create UPLOAD_DIR {UPLOAD_DIR}: {e}")
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._() -]+")
 
