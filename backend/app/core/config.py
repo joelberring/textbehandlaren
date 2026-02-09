@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     # CORS: Comma-separated list of allowed origins
     ALLOWED_ORIGINS: str = "http://localhost:8001,http://localhost:8000"
     
-    CHROMA_DB_PATH: str = "./chroma_db"
+    CHROMA_DB_PATH: str = "/tmp/chroma_db" if os.getenv("ENVIRONMENT") == "production" else "./chroma_db"
     COLLECTION_NAME: str = "antigravity_docs"
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
