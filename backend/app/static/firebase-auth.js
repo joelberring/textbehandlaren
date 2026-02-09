@@ -1,33 +1,49 @@
-// Firebase configuration for Textbehandlaren
-const firebaseConfig = {
-    apiKey: "AIzaSyBOOxiDV-JIc5Q8ELGPyPhp7oj5aTPlLnc",
-    authDomain: "textbehandlaren.firebaseapp.com",
-    projectId: "textbehandlaren",
-    storageBucket: "textbehandlaren.firebasestorage.app",
-    messagingSenderId: "319021876488",
-    appId: "1:319021876488:web:c708c609f7e596fb4e98bd",
-    measurementId: "G-PZ8RBDWZZW"
-};
+// Firebase configuration - fetched dynamically from backend
+let firebaseConfig = null;
+let auth = null;
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
+// Initialize Firebase configuration
+async function initializeFirebase() {
+    try {
+        const response = await fetch('/api/config/firebase');
+        if (!response.ok) {
+            throw new Error('Failed to fetch Firebase configuration');
+        }
+        firebaseConfig = await response.json();
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        auth = firebase.auth();
+
+        // Setup auth state observer
+        setupAuthObserver();
+
+        console.log("Firebase initialized successfully");
+    } catch (error) {
+        console.error("Firebase initialization failed:", error);
+    }
+}
+
+// Call initialization
+initializeFirebase();
 
 // Current user state
 let currentUser = null;
 let idToken = null;
 
-// Auth state observer
-auth.onAuthStateChanged(async (user) => {
-    currentUser = user;
-    if (user) {
-        idToken = await user.getIdToken();
-        updateUIForLoggedInUser(user);
-    } else {
-        idToken = null;
-        updateUIForLoggedOutUser();
-    }
-});
+// Auth/token observer setup (also fires on token refresh)
+function setupAuthObserver() {
+    auth.onIdTokenChanged(async (user) => {
+        currentUser = user;
+        if (user) {
+            idToken = await user.getIdToken();
+            updateUIForLoggedInUser(user);
+        } else {
+            idToken = null;
+            updateUIForLoggedOutUser();
+        }
+    });
+}
 
 // Login with email/password
 async function loginWithEmail(email, password) {

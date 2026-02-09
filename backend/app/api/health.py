@@ -1,14 +1,16 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from backend.app.core.config import settings
 from backend.app.core.firebase import db
 from backend.app.services.embeddings import get_embeddings
+from backend.app.core.auth import get_current_user
+from backend.app.schemas.user import UserProfile
 import time
 
 router = APIRouter()
 
 
 @router.get("/")
-async def health_check():
+async def health_check(current_user: UserProfile = Depends(get_current_user)):
     status = {
         "status": "ok",
         "timestamp": int(time.time()),

@@ -23,11 +23,22 @@
 I Google Cloud Console → Cloud Run → din service → **Edit & Deploy New Revision** → **Variables**:
 
 ```
+ENVIRONMENT=production
+DEV_AUTH_BYPASS=false
 ANTHROPIC_API_KEY=sk-ant-xxx
 FIREBASE_PROJECT_ID=ditt-projekt-id
 FIREBASE_STORAGE_BUCKET=ditt-projekt-id.appspot.com
 FIREBASE_CREDENTIALS={"type":"service_account",...}  # hela JSON:en som sträng
 ```
+
+### Viktigt (Async jobb / progress i UI)
+Textbehandlaren använder `ask-async` + polling för att kunna visa progress (hämtar källor, skriver avsnitt, verifierar osv).
+
+För Cloud Run kräver detta att **CPU allocation** är satt till **Always allocated**, annars kan bakgrundsjobbet stanna när HTTP-svaret redan är skickat.
+
+Rekommenderat:
+- Cloud Run → **Edit & Deploy New Revision** → **CPU allocation**: `Always allocated`
+- `ENVIRONMENT=production` (krävs för att stänga dev-bypass och för att använda Firestore-baserad jobblagring)
 
 ---
 
@@ -52,12 +63,15 @@ gcloud run deploy textbehandlaren \
 
 ---
 
-## 4. Frontend på Vercel
+## 4. Frontend
 
-1. Skapa konto på [vercel.com](https://vercel.com)
-2. Importera repo
-3. Root directory: `backend/app/static`
-4. Sätt env var `VITE_API_URL` till din Cloud Run-URL
+### Alternativ A (rekommenderat): Frontend via Cloud Run
+Backend serverar redan `backend/app/static/index.html` på `/` och statiska filer under `/static`. Du kan alltså köra allt från samma Cloud Run‑service utan Vercel.
+
+### Alternativ B: Frontend på Vercel
+Om du vill lägga frontend separat behöver du antingen:
+- Lägga en rewrite/proxy i Vercel så att `/api/*` skickas till Cloud Run, eller
+- Ändra frontendkoden så att den använder en absolut API‑bas-URL (i stället för relativa `/api/...`).
 
 ---
 

@@ -27,18 +27,24 @@ class Settings(BaseSettings):
     GDPR_SCRUB_PROVIDER: str = "MISTRAL_EU"
     FIREBASE_PROJECT_ID: str = ""
     FIREBASE_STORAGE_BUCKET: str = ""
+    FIREBASE_API_KEY: str = ""
+    FIREBASE_AUTH_DOMAIN: str = ""
+    FIREBASE_MESSAGING_SENDER_ID: str = ""
+    FIREBASE_APP_ID: str = ""
+    FIREBASE_MEASUREMENT_ID: str = ""
     ALLOW_LOCAL_FALLBACK: bool = False
     HEALTH_CHECK_EMBEDDINGS: bool = False
     DIRECT_ATTACHMENT_MAX_CHARS: int = 8000
     DIRECT_ATTACHMENT_MAX_PAGES: int = 20
     DEFAULT_PERSONA_PROMPT: str = """Du är en intelligent dokumentassistent som heter Antigravity. 
-Ditt uppdrag är att hjälpa handläggare genom att svara på frågor baserat på de tillhandahållna styrdokumenten.
+Ditt uppdrag är att hjälpa handläggare genom att ta fram textutkast baserat på tillhandahållet källmaterial.
 
 INSTRUKTIONER:
-1. Använd ENDAST den tillhandahållna kontexten för att svara på frågan.
-2. Om svaret inte finns i kontexten, säg vänligt att du inte kan hitta informationen i styrdokumenten.
-3. Skriv formellt, sakligt och koncist på svenska. Undvik utfyllnadsord.
-4. Citera alltid källfilen (filename) för dina påståenden."""
+1. Använd ENDAST den tillhandahållna kontexten/källutdragen för att svara. Gissa inte och hitta aldrig på fakta.
+2. Om svaret inte finns i källmaterialet: skriv tydligt att du inte hittar informationen, och vad som skulle behövas för att kunna svara.
+3. Skriv på formell, saklig och tydlig svenska i myndighetsnära ton, som en erfaren handläggare/stadsplanerare i en större svensk kommun (t.ex. Stockholms stad).
+4. Undvik "notiser", spekulation och värdeladdade formuleringar. Redovisa osäkerheter istället.
+5. Citera alltid med käll-ID i formatet [Sx] för sakpåståenden."""
 
 
     class Config:

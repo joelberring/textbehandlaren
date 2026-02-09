@@ -8,6 +8,8 @@ from backend.app.core.firebase import db
 from backend.app.core.auth import get_current_user, require_role
 from backend.app.schemas.user import UserProfile, UserRole
 import logging
+import asyncio
+from backend.app.services.job_store import job_store
 
 router = APIRouter()
 
@@ -23,6 +25,10 @@ class ChatRequest(BaseModel):
     longform: Optional[bool] = None
     suggest_images: Optional[bool] = True
     response_mode: Optional[str] = "auto"  # auto | fast | standard | deep
+
+class ChatJobStartResponse(BaseModel):
+    job_id: str
+    status: str
 
 class BlockCommentRequest(BaseModel):
     assistant_id: str
@@ -88,6 +94,113 @@ async def ask_question(
                 detail=f"Anthropic API-nyckel saknas eller är ogiltig. Kontrollera .env-filen. (Fel: {error_msg})"
             )
         raise HTTPException(status_code=500, detail=error_msg)
+
+@router.post("/ask-async", response_model=ChatJobStartResponse)
+async def ask_question_async(
+    request: ChatRequest,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """
+    Start a chat generation job and return immediately with a job_id.
+    The frontend polls /api/chat/jobs/{job_id} for progress/result.
+    """
+    try:
+        if current_user.role != UserRole.SUPERADMIN:
+            try:
+                quota_service.enforce_chat_quotas(current_user.id, request.project_id)
+            except QuotaExceededError as q:
+                raise HTTPException(
+                    status_code=429,
+                    detail={"message": q.message, "retry_after_seconds": q.retry_after_seconds},
+                    headers={"Retry-After": str(q.retry_after_seconds)}
+                )
+            except Exception as quota_err:
+                logging.warning(f"Quota enforcement failed (ask-async): {quota_err}")
+
+        try:
+            await learning_service.capture_preferences_from_text(
+                current_user.id,
+                request.query,
+                source="query"
+            )
+        except Exception as mem_err:
+            logging.warning(f"Preference capture failed (ask-async): {mem_err}")
+
+        job = await job_store.create_chat_job(
+            user_id=current_user.id,
+            assistant_id=request.assistant_id,
+            query=request.query,
+            conversation_id=request.conversation_id,
+            project_id=request.project_id
+        )
+
+        async def _progress_cb(stage: str, progress: int, message: str = "", partial_answer: str = None):
+            fields = {
+                "status": "running",
+                "stage": stage,
+                "progress": progress,
+                "message": message or "",
+            }
+            if partial_answer is not None:
+                fields["partial_answer"] = partial_answer
+            await job_store.update(job.id, **fields)
+
+        async def _runner():
+            try:
+                await job_store.update(job.id, status="running", stage="starting", progress=1, message="Startar...")
+                response = await rag_service.ask(
+                    request.query,
+                    request.assistant_id,
+                    request.conversation_id,
+                    request.custom_persona,
+                    request.show_citations,
+                    user_id=current_user.id,
+                    project_id=request.project_id,
+                    target_pages=request.target_pages,
+                    target_words=request.target_words,
+                    longform=request.longform,
+                    suggest_images=True if request.suggest_images is None else bool(request.suggest_images),
+                    response_mode=(request.response_mode or "auto"),
+                    progress_cb=_progress_cb
+                )
+                await job_store.update(
+                    job.id,
+                    status="completed",
+                    stage="completed",
+                    progress=100,
+                    message="Klar.",
+                    answer=response.get("answer") or "",
+                    sources=response.get("sources") or [],
+                    matched_images=response.get("matched_images") or [],
+                    debug=response.get("debug") or {},
+                    error=""
+                )
+            except Exception as e:
+                await job_store.update(
+                    job.id,
+                    status="failed",
+                    stage="failed",
+                    progress=100,
+                    message="Fel.",
+                    error=str(e)
+                )
+
+        asyncio.create_task(_runner())
+        return {"job_id": job.id, "status": job.status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/jobs/{job_id}")
+async def get_job_status(
+    job_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    job = await job_store.get(job_id)
+    if not job or str(job.user_id) != str(current_user.id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job.to_public_dict()
 
 @router.post("/comment-edit")
 async def comment_edit(

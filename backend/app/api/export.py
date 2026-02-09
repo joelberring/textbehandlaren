@@ -1,12 +1,24 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from backend.app.services.exporter import exporter_service
 from backend.app.core.firebase import db
+from backend.app.core.auth import get_current_user
+from backend.app.schemas.user import UserProfile
 import os
 
 router = APIRouter()
+
+TEMPLATE_DIR = "backend/app/templates"
+
+def _is_safe_template_path(path: str) -> bool:
+    try:
+        base = os.path.abspath(TEMPLATE_DIR) + os.sep
+        target = os.path.abspath(path)
+        return target.startswith(base) and target.lower().endswith(".docx")
+    except Exception:
+        return False
 
 class ExportRequest(BaseModel):
     query: str
@@ -16,7 +28,10 @@ class ExportRequest(BaseModel):
     assistant_id: Optional[str] = None
 
 @router.post("/word")
-async def export_to_word(request: ExportRequest):
+async def export_to_word(
+    request: ExportRequest,
+    current_user: UserProfile = Depends(get_current_user)
+):
     template_path = None
     
     if request.assistant_id:
@@ -26,7 +41,9 @@ async def export_to_word(request: ExportRequest):
             if template_id:
                 temp_ref = db.collection("templates").document(template_id).get()
                 if temp_ref.exists:
-                    template_path = temp_ref.to_dict().get("path")
+                    candidate = temp_ref.to_dict().get("path")
+                    if candidate and _is_safe_template_path(candidate) and os.path.exists(candidate):
+                        template_path = candidate
 
     try:
         file_path = await exporter_service.generate_word_response(
@@ -47,4 +64,3 @@ async def export_to_word(request: ExportRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

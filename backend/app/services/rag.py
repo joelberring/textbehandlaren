@@ -17,6 +17,171 @@ class RAGService:
     def __init__(self):
         self.default_primary_model = settings.LLM_DEFAULT_MODEL
         self.default_fallback_model = settings.LLM_FALLBACK_MODEL
+        # Used to sanitize any LLM-produced citations so we never display fabricated source IDs.
+        self._citation_id_re = re.compile(r"\bS\d+\b", re.IGNORECASE)
+
+    def _normalize_and_filter_citations(self, text: str, allowed_source_ids: set, enable_citations: bool) -> str:
+        """
+        Enforce a strict citation format to prevent fabricated references.
+        Allowed citations: [Sx] / (Sx) / bare Sx tokens, where Sx exists in allowed_source_ids.
+        """
+        if not text:
+            return text
+
+        out = str(text)
+
+        # Convert common "Källa: ..." formats to plain [Sx] / (Sx)
+        out = re.sub(
+            r"\[\s*käll[aä][^\]]*?(S\d+)\s*\]",
+            lambda m: f"[{m.group(1).upper()}]",
+            out,
+            flags=re.IGNORECASE
+        )
+        out = re.sub(
+            r"\(\s*käll[aä][^)]*?(S\d+)\s*\)",
+            lambda m: f"({m.group(1).upper()})",
+            out,
+            flags=re.IGNORECASE
+        )
+
+        if not enable_citations:
+            # Remove any remaining citations if user disabled them.
+            out = re.sub(r"\[\s*S\d+\s*\]", "", out, flags=re.IGNORECASE)
+            out = re.sub(r"\(\s*S\d+\s*\)", "", out, flags=re.IGNORECASE)
+            out = re.sub(r"\bS\d+\b", "", out, flags=re.IGNORECASE)
+            out = re.sub(r"[ \t]{2,}", " ", out)
+            out = re.sub(r"\n{3,}", "\n\n", out)
+            return out.strip()
+
+        # Drop unknown citations (hallucinated S-ids)
+        def _keep_only_allowed_brackets(m):
+            sid = (m.group(1) or "").upper()
+            return f"[{sid}]" if sid in allowed_source_ids else ""
+        out = re.sub(r"\[\s*(S\d+)\s*\]", _keep_only_allowed_brackets, out, flags=re.IGNORECASE)
+
+        def _keep_only_allowed_paren(m):
+            sid = (m.group(1) or "").upper()
+            return f"({sid})" if sid in allowed_source_ids else ""
+        out = re.sub(r"\(\s*(S\d+)\s*\)", _keep_only_allowed_paren, out, flags=re.IGNORECASE)
+
+        out = re.sub(
+            r"\b(S\d+)\b",
+            lambda m: m.group(1).upper() if m.group(1).upper() in allowed_source_ids else "",
+            out,
+            flags=re.IGNORECASE
+        )
+
+        # Cleanup artifacts
+        out = re.sub(r"\[\s*\]", "", out)
+        out = re.sub(r"\(\s*\)", "", out)
+        out = re.sub(r"[ \t]{2,}", " ", out)
+        out = re.sub(r"\n{3,}", "\n\n", out)
+        return out.strip()
+
+    def _build_source_briefs(self, sources: list, max_sources: int = 18, excerpt_chars: int = 520) -> str:
+        """
+        Compact source view for verification prompts.
+        The goal is to provide enough grounding signal without blowing up context size.
+        """
+        parts = []
+        for s in (sources or [])[:max_sources]:
+            meta = s.get("metadata", {}) or {}
+            sid = (meta.get("source_ref") or s.get("source_ref") or "-").upper()
+            filename = str(meta.get("filename") or "Okänd fil")
+            page = meta.get("page")
+            page_label = f"sida {page}" if page not in [None, "", 0, "0"] else "okänd sida"
+            lib_name = str(meta.get("library_name") or "okänt bibliotek")
+            lib_type = str(meta.get("library_type") or s.get("type") or "-")
+            prio = meta.get("library_priority")
+            prio_label = str(prio) if prio is not None else "-"
+
+            excerpt = str(s.get("content") or "").strip()
+            excerpt = re.sub(r"\s+", " ", excerpt)
+            excerpt = excerpt[:excerpt_chars]
+            parts.append(
+                f"{sid}: {filename} • {page_label} • {lib_name} ({lib_type}, prio {prio_label})\n{excerpt}"
+            )
+        return "\n\n".join(parts) if parts else "Inga källor."
+
+    async def _verify_and_ground_answer(
+        self,
+        query: str,
+        draft_answer: str,
+        sources: list,
+        allowed_source_ids: set,
+        show_citations: bool,
+        learned_prefs: str,
+        persona: str,
+        primary_model: str,
+        fallback_model: str,
+        longform_mode: bool
+    ) -> str:
+        """
+        Second-pass verifier that removes/rewrites any content that is not supported by the sources.
+        This is intentionally strict to reduce hallucinations.
+        """
+        from langchain_core.messages import SystemMessage, HumanMessage
+
+        briefs = self._build_source_briefs(
+            sources,
+            max_sources=min(24, max(12, len(sources or []))),
+            excerpt_chars=520 if longform_mode else 420
+        )
+        allowed_list = ", ".join(sorted([sid for sid in (allowed_source_ids or set()) if sid])) or "-"
+
+        citation_rule = (
+            "KÄLLHÄNVISNINGAR: Använd endast [Sx] där Sx finns i listan över tillåtna käll-ID. "
+            "Lägg källhänvisningar efter påståenden. Hitta aldrig på nya käll-ID."
+        ) if show_citations else (
+            "KÄLLHÄNVISNINGAR: Använd inga källhänvisningar i texten."
+        )
+
+        system_instr = f"""DU ÄR EN STRIKT FAKTAGRANSKARE.
+Mål: Revidera utkastet så att ALLA sakpåståenden stöds av KÄLLUTDRAGEN. Du får INTE lägga till ny information.
+
+Regler:
+- Om ett påstående inte stöds av källutdragen: ta bort det eller skriv om det till en tydlig osäkerhet ("källmaterialet stödjer inte ...").
+- HITTA ALDRIG PÅ fakta, siffror, datum, namn, slutsatser eller "notiser/OBS" som inte stöds.
+- Behåll rubriker och disposition så långt det går, men prioritera korrekthet.
+- Returnera endast den reviderade texten i markdown (inga förklaringar före/efter).
+
+STIL (behåll så gott det går):
+{learned_prefs or ""}
+
+ASSISTENTENS ROLL/PERSONA:
+{persona or ""}
+
+{citation_rule}
+"""
+
+        human_instr = f"""FRÅGA/INSTRUKTION:
+{query}
+
+UTKAST (att granska):
+{draft_answer}
+
+TILLÅTNA KÄLL-ID:
+{allowed_list}
+
+KÄLLUTDRAG:
+{briefs}
+"""
+
+        verify_max_tokens = 4096 if longform_mode else 2200
+        resp = await self._invoke_with_fallback(
+            [SystemMessage(content=system_instr), HumanMessage(content=human_instr)],
+            max_tokens=verify_max_tokens,
+            primary_model=primary_model,
+            fallback_model=fallback_model
+        )
+        verified_raw = (resp.content or "").strip()
+        verified_scrubbed, _output_findings = await scrubber_service.scrub_text(verified_raw)
+        verified = self._normalize_and_filter_citations(
+            verified_scrubbed,
+            allowed_source_ids=allowed_source_ids,
+            enable_citations=show_citations
+        )
+        return verified.strip()
 
     def _wants_longform(self, query: str, longform_flag: bool = None) -> bool:
         if longform_flag:
@@ -237,9 +402,16 @@ class RAGService:
                   custom_persona: str = None, show_citations: bool = True, 
                   user_id: str = None, project_id: str = None,
                   target_pages: int = None, target_words: int = None,
-                  longform: bool = None, suggest_images: bool = True, response_mode: str = "auto"):
+                  longform: bool = None, suggest_images: bool = True, response_mode: str = "auto",
+                  progress_cb=None):
         if not user_id:
             user_id = "anonymous"
+
+        if progress_cb:
+            try:
+                await progress_cb("preprocess", 2, "Förbereder fråga...")
+            except Exception:
+                pass
         
         # Fetch assistant metadata
         doc_ref = db.collection("assistants").document(assistant_id).get()
@@ -260,7 +432,15 @@ class RAGService:
             if temp_ref.exists:
                 temp_data = temp_ref.to_dict()
                 temp_path = temp_data.get("path")
-                if temp_path and os.path.exists(temp_path):
+                def _is_safe_template_path(path: str) -> bool:
+                    try:
+                        base = os.path.abspath("backend/app/templates") + os.sep
+                        target = os.path.abspath(path)
+                        return target.startswith(base) and target.lower().endswith(".docx")
+                    except Exception:
+                        return False
+
+                if temp_path and os.path.exists(temp_path) and _is_safe_template_path(temp_path):
                     try:
                         parsed = parse_template(temp_path)
                         template_prompt = build_template_prompt(parsed)
@@ -327,6 +507,12 @@ class RAGService:
         )
         if response_mode == "deep":
             longform_mode = True
+
+        if progress_cb:
+            try:
+                await progress_cb("retrieval", 8, "Hämtar källor och bygger underlag...")
+            except Exception:
+                pass
         
         # Get Conversation History
         history = []
@@ -428,13 +614,25 @@ class RAGService:
                 return max(4, base_k - 4)
             return max(2, base_k - 6)
 
+        # Global cap so low-priority libraries cannot drown high-priority material.
+        # Also helps keep prompt sizes stable (better grounding, fewer hallucinations).
+        if simple_mode:
+            max_total_sources = 10
+        elif longform_mode or template_structure:
+            max_total_sources = 36
+        else:
+            max_total_sources = 24
+        max_chunk_chars = 1400 if simple_mode else (2200 if (longform_mode or template_structure) else 1800)
+
         for lib in library_plan:
+            if len(all_sources) >= max_total_sources:
+                break
             lib_id = lib["id"]
             scrub_lib = lib["scrub"]
             lib_type = lib["type"]
             lib_name = lib["name"]
             lib_priority = lib["priority"]
-            k = _k_for_priority(lib_priority)
+            k = min(_k_for_priority(lib_priority), max_total_sources - len(all_sources))
 
             print(f"Searching library {lib_id} ({lib_type}, priority={lib_priority}) with k={k}...")
             source_docs = ingestion_service.search(scrubbed_query, [lib_id], k=k, query_vector=query_vector)
@@ -446,6 +644,7 @@ class RAGService:
                     # Scrub content from sensitive libraries (Mistral integration)
                     text, findings = await scrubber_service.scrub_text(text)
                     all_findings.extend(findings)
+                text = (text or "")[:max_chunk_chars]
                 
                 source_ref = f"S{len(all_sources) + 1}"
                 metadata = dict(doc.metadata or {})
@@ -465,16 +664,28 @@ class RAGService:
                     "metadata": metadata,
                     "type": lib_type
                 })
+                if progress_cb and len(all_sources) in [4, 8, 12, 18, 24, 32]:
+                    try:
+                        await progress_cb(
+                            "retrieval",
+                            min(20, 8 + int((len(all_sources) / max(1, max_total_sources)) * 12)),
+                            f"Hämtar källor... ({len(all_sources)}/{max_total_sources})"
+                        )
+                    except Exception:
+                        pass
 
         # Inline attachment text (direct read, no index)
         if inline_texts:
             for item in inline_texts:
+                if len(all_sources) >= max_total_sources:
+                    break
                 try:
                     filename = item.get("filename", "Bifogad fil")
                     text = item.get("text", "")
                     if text:
                         text, findings = await scrubber_service.scrub_text(text)
                         all_findings.extend(findings)
+                        text = (text or "")[:max_chunk_chars]
                         source_ref = f"S{len(all_sources) + 1}"
                         all_context_chunks.append(f"KÄLLA {source_ref} ([BIFOGAD FIL] {filename}):\n{text}")
                         all_sources.append({
@@ -492,6 +703,14 @@ class RAGService:
                 except Exception as e:
                     print(f"Inline attachment handling failed: {e}")
         context_text = "\n\n---\n\n".join(all_context_chunks)
+        allowed_id_list = [s.get("source_ref") for s in all_sources if s.get("source_ref")]
+        allowed_id_set = set(allowed_id_list)
+
+        if progress_cb:
+            try:
+                await progress_cb("retrieval_done", 22, f"Källunderlag klart ({len(all_sources)} källutdrag).")
+            except Exception:
+                pass
         priority_lines = []
         for lib in library_plan[:12]:
             source_suffix = " (assistent)" if lib.get("priority_source") == "assistant_override" else ""
@@ -506,16 +725,18 @@ class RAGService:
             )
         if show_citations:
             citation_instr = (
-                "KÄLLHÄNVISNINGAR ÄR OBLIGATORISKA:\n"
-                "- Varje sakpåstående ska ha en källhänvisning i formatet [Källa: filnamn, Sx] där Sx är käll-ID.\n"
-                "- Exempel: [Källa: planbeskrivning.pdf, S3].\n"
-                "- Hitta ALDRIG på egna käll-ID:n (Sx) eller filnamn som inte finns i listan nedan.\n"
-                "- Om flera källor stödjer ett påstående, lista dem: [Källa: fil1.pdf, S1; fil2.docx, S4]."
+                "KÄLLHÄNVISNINGAR:\n"
+                "- Källhänvisningar är OBLIGATORISKA för sakpåståenden.\n"
+                "- Använd ENDAST käll-ID i formatet [Sx] (exempel: [S3]).\n"
+                "- Hitta ALDRIG på nya käll-ID (Sx).\n"
+                "- Använd INGA filnamn i källhänvisningen.\n"
+                "- Sätt källhänvisningen i slutet av meningen/stycket som stöds av källan.\n"
+                "- Om flera källor stödjer ett påstående, lista dem: [S1][S4]."
             )
         else:
             citation_instr = "Använd INTE källhänvisningar i texten."
 
-        if len(all_sources) == 0 and not template_structure:
+        if len(all_sources) == 0:
             return {
                 "answer": "Jag hittar inga källor i dina bibliotek eller bifogade filer. Kontrollera att filerna är färdigbearbetade och försök igen.",
                 "sources": [],
@@ -554,12 +775,16 @@ GROUNDING OCH SANNING (KRITISKT):
 - Du får endast använda information som finns i de tillhandahållna REFERENSMATERIALEN nedan.
 - Om du inte hittar svaret i källorna, säg: "Jag hittar tyvärr ingen information om detta i källmaterialet."
 - HITTA ALDRIG PÅ FAKTA, SIFFROR, NAMN ELLER DATUM.
-- Skapa ALDRIG källhänvisningar till filer som inte finns i listan.
+- Tidigare AI-utkast och dialoghistorik är arbetsmaterial, inte källor. Vid konflikt: följ referensmaterialet.
+- Skapa ALDRIG källhänvisningar med käll-ID som inte finns i listan över tillåtna källor.
 - Om en källa är otydlig, redovisa osäkerheten istället för att gissa.
 
 STIL OCH FORMATERING:
 {learned_prefs}
 {citation_instr}
+
+TILLÅTNA KÄLL-ID (använd endast dessa i [Sx]):
+{", ".join(allowed_id_list)}
 IMPORTANT: Om du redigerar ett befintligt utkast, behåll dess grundläggande struktur.
 IMPORTANT: Om malltexten innehåller instruktioner eller fasta formuleringar, upprepa dem inte. Fyll endast i saklig text där det behövs.
 ANVÄND MARKDOWN (# för rubriker, - för listor) för att strukturera ditt svar så att det kan formateras korrekt vid export.
@@ -599,6 +824,12 @@ VIKTIGT: Om materialet ovan innehåller texter märkta som [INPUT] eller [ATTACH
             or bool(target_words and target_words >= 900)
         ) and not simple_mode
 
+        if progress_cb:
+            try:
+                await progress_cb("generate", 28, "Startar textgenerering...")
+            except Exception:
+                pass
+
         if simple_mode:
             selected_model = self._pick_fast_model(selected_model, fallback_model, model_meta.get("allowed_models", []))
             model_meta["selected_model"] = selected_model
@@ -622,9 +853,12 @@ Uppdatera texten enligt instruktionen och returnera hela det uppdaterade dokumen
             HumanMessage(content=user_input)
         ]
 
+        used_section_verification = False
         async def _generate_longform():
+            nonlocal used_section_verification
             outline_user = f"""Skapa en disposition med rubriker (#, ##).
 Målet är cirka {target_words or 1500} ord totalt. Ange ordmål per rubrik i parentes, t.ex. "## Bakgrund (800 ord)".
+Om längdmålet är mycket långt (t.ex. > 6000 ord): dela upp i fler rubriker så att enskilda avsnitt inte blir extremt långa (sikta på ca 800–1400 ord per huvudavsnitt).
 Följ mallstrukturen om den finns.
 Returnera ENDAST dispositionen i markdown.
 
@@ -642,6 +876,12 @@ Fråga/instruktion:
                 fallback_model=fallback_model
             )
             outline = outline_resp.content
+
+            if progress_cb:
+                try:
+                    await progress_cb("outline", 34, "Disposition klar. Börjar skriva avsnitt...")
+                except Exception:
+                    pass
 
             headings = []
             for line in outline.splitlines():
@@ -677,23 +917,47 @@ Fråga/instruktion:
             per_section = max(220, int(base_words / max(1, len(headings))))
             sections_text = []
             done_titles = []
+            verify_per_section = bool(target_words and target_words >= 3500)
+            used_section_verification = verify_per_section
+            outline_compact = "\n".join([("#" * h["level"]) + " " + h["title"] for h in headings])
             for idx, heading in enumerate(headings):
                 title = heading["title"]
                 level = heading["level"]
+                prior_excerpt = "\n\n".join(sections_text).strip()
+                if len(prior_excerpt) > 2800:
+                    prior_excerpt = prior_excerpt[-2800:]
+                prior_block = ""
+                if prior_excerpt:
+                    prior_block = f"Tidigare text (kort utdrag för kontinuitet):\n{prior_excerpt}\n"
                 section_user = f"""Skriv avsnitt {idx + 1} av {len(headings)}: '{title}'.
+Övergripande uppgift:
+{scrubbed_query}
+
+Disposition (för sammanhang):
+{outline_compact}
+
 Sikta på cirka {per_section} ord.
 Bygg vidare på tidigare avsnitt utan upprepningar.
 Redan skrivna rubriker: {", ".join(done_titles) if done_titles else "Inga"}.
 Använd källhänvisningar där det behövs. Återge INTE instruktionstext.
 Skriv inte rubriken igen i löptexten.
+{prior_block}
+Håll dig strikt till rubriken '{title}' och dispositionen; skriv inte innehåll som hör hemma under andra rubriker.
 """
+                if progress_cb:
+                    try:
+                        pct = 34 + int(((idx) / max(1, len(headings))) * 46)
+                        await progress_cb("writing", pct, f"Skriver avsnitt {idx + 1}/{len(headings)}: {title}")
+                    except Exception:
+                        pass
                 section_messages = [
                     SystemMessage(content=system_instr),
                     HumanMessage(content=section_user)
                 ]
+                section_max_tokens = 4096 if per_section >= 1200 else (3200 if verify_per_section else 2400)
                 sec_resp = await self._invoke_with_fallback(
                     section_messages,
-                    max_tokens=2200,
+                    max_tokens=section_max_tokens,
                     primary_model=selected_model,
                     fallback_model=fallback_model
                 )
@@ -704,9 +968,35 @@ Skriv inte rubriken igen i löptexten.
                     if normalized == title.lower().rstrip(":"):
                         body = rest.strip()
 
+                if verify_per_section:
+                    try:
+                        if progress_cb:
+                            await progress_cb("verify_section", 34 + int(((idx) / max(1, len(headings))) * 46) + 2, f"Verifierar avsnitt {idx + 1}/{len(headings)}...")
+                        body = await self._verify_and_ground_answer(
+                            query=f"{scrubbed_query}\n\nAVSNITT: {title}",
+                            draft_answer=body,
+                            sources=all_sources,
+                            allowed_source_ids=allowed_id_set,
+                            show_citations=show_citations,
+                            learned_prefs=learned_prefs,
+                            persona=persona,
+                            primary_model=fallback_model or selected_model,
+                            fallback_model=fallback_model,
+                            longform_mode=False
+                        )
+                    except Exception as e:
+                        print(f"Section verification failed ({title}): {e}")
+
                 heading_prefix = "#" * level
                 sections_text.append(f"{heading_prefix} {title}\n{body}")
                 done_titles.append(title)
+                if progress_cb:
+                    try:
+                        assembled = "\n\n".join(sections_text)
+                        pct = 34 + int(((idx + 1) / max(1, len(headings))) * 46)
+                        await progress_cb("writing", pct, f"Klart avsnitt {idx + 1}/{len(headings)}.", partial_answer=assembled)
+                    except Exception:
+                        pass
 
             return "\n\n".join(sections_text)
 
@@ -730,6 +1020,11 @@ Fråga/instruktion:
                 fallback_model=fallback_model
             )
             outline = outline_resp.content
+            if progress_cb:
+                try:
+                    await progress_cb("outline", 34, "Disposition klar. Fyller med full text...")
+                except Exception:
+                    pass
 
             full_user = f"""Här är dispositionen:
 {outline}
@@ -767,10 +1062,59 @@ Returnera hela dokumentet i markdown."""
                 fallback_model=fallback_model
             )
             answer = response.content
+
+        if progress_cb:
+            try:
+                await progress_cb("verify", 82, "Kvalitetssäkrar mot källor...")
+            except Exception:
+                pass
         
         # Scrub AI output to prevent PII leakage in generated text
         scrubbed_answer, output_findings = await scrubber_service.scrub_text(answer)
         all_findings.extend(output_findings)
+        scrubbed_answer = self._normalize_and_filter_citations(scrubbed_answer, allowed_id_set, enable_citations=show_citations)
+
+        verified = False
+        # Second-pass verification to aggressively remove hallucinations.
+        # We skip only in explicit fast mode; auto/standard/deep are verified.
+        # For very long answers we do per-section verification instead (global verification won't fit context).
+        if response_mode != "fast" and not used_section_verification:
+            try:
+                verify_primary = selected_model
+                # Use the cheaper model for verification unless user explicitly asked for deep/longform/template work.
+                if not (response_mode == "deep" or longform_mode or template_structure):
+                    verify_primary = fallback_model or selected_model
+                scrubbed_answer = await self._verify_and_ground_answer(
+                    query=scrubbed_query,
+                    draft_answer=scrubbed_answer,
+                    sources=all_sources,
+                    allowed_source_ids=allowed_id_set,
+                    show_citations=show_citations,
+                    learned_prefs=learned_prefs,
+                    persona=persona,
+                    primary_model=verify_primary,
+                    fallback_model=fallback_model,
+                    longform_mode=bool(longform_mode)
+                )
+                verified = True
+            except Exception as e:
+                print(f"Answer verification failed: {e}")
+
+        if progress_cb:
+            try:
+                await progress_cb("finalize", 95, "Slutför och sparar konversation...")
+            except Exception:
+                pass
+
+        # Hard safety: if citations are enabled and we still cannot produce any valid citations,
+        # return a conservative message instead of an untraceable answer.
+        if show_citations and allowed_id_set:
+            has_citation = bool(re.search(r"(\\[\\s*S\\d+\\s*\\]|\\(\\s*S\\d+\\s*\\))", scrubbed_answer or "", flags=re.IGNORECASE))
+            if not has_citation:
+                scrubbed_answer = (
+                    "Jag kan tyvärr inte skapa ett källbelagt svar utifrån underlaget just nu. "
+                    "Prova att omformulera frågan mer specifikt eller ladda upp mer relevant material."
+                )
 
         # Save to history
         if conversation_id:
@@ -797,7 +1141,8 @@ Returnera hela dokumentet i markdown."""
                         "library_priority_source": meta.get("library_priority_source"),
                         "doc_id": meta.get("doc_id")
                     },
-                    "content": (s.get("content") or "")[:240]
+                    # Enough to be useful in the UI/exports without risking Firestore doc size.
+                    "content": (s.get("content") or "")[:520]
                 })
             history_images = matched_images[:6] if matched_images else []
 
@@ -819,6 +1164,12 @@ Returnera hela dokumentet i markdown."""
                 "updated_at": datetime.utcnow()
             })
 
+        if progress_cb:
+            try:
+                await progress_cb("completed", 100, "Klar.")
+            except Exception:
+                pass
+
         return {
             "answer": scrubbed_answer,
             "sources": all_sources,
@@ -828,6 +1179,8 @@ Returnera hela dokumentet i markdown."""
             "debug": {
                 "source_count": len(all_sources),
                 "k": base_k,
+                "max_total_sources": max_total_sources,
+                "max_chunk_chars": max_chunk_chars,
                 "context_length": len(context_text),
                 "target_words": target_words,
                 "longform_mode": longform_mode,
@@ -836,6 +1189,7 @@ Returnera hela dokumentet i markdown."""
                 "suggest_images": suggest_images,
                 "response_mode": response_mode,
                 "simple_mode": simple_mode,
+                "verified": verified,
                 "model": {
                     "primary": selected_model,
                     "fallback": fallback_model,
@@ -918,6 +1272,8 @@ Regler:
 - Ändra inte andra delar av dokumentet.
 - Behåll saklighet, ton, källhänvisningar och format.
 - Om kommentaren är oklar: gör minsta möjliga ändring.
+- HITTA ALDRIG PÅ nya fakta. Om källstödet inte räcker: gör minsta möjliga ändring och gissa inte.
+- Använd endast käll-ID som faktiskt finns i KÄLLSTÖD (Sx). Hitta inte på nya käll-ID.
 - Lägg aldrig till förklaringar före eller efter blocket.
 
 STIL:
@@ -946,6 +1302,8 @@ KOMMENTAR FRÅN ANVÄNDAREN:
         )
         revised_block_raw = (response.content or "").strip()
         revised_block, output_findings = await scrubber_service.scrub_text(revised_block_raw)
+        allowed_ids = {s.get("source_ref") for s in (latest_sources or []) if s.get("source_ref")}
+        revised_block = self._normalize_and_filter_citations(revised_block, allowed_ids, enable_citations=True)
         revised_block = revised_block.strip() or block_text
 
         updated_text, matched_block = self._replace_first_matching_block(full_text, block_text, revised_block)

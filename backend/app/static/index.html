@@ -10,15 +10,28 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="/static/firebase-auth.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..900&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
 
     <style>
         :root {
-            --bg: #ffffff;
-            --text: #1a1a1a;
-            --border: #000000;
-            --accent: #f5f5f5;
-            --muted: #666666;
-            --font: 'Inter', -apple-system, blinkmacsystemfont, 'Segoe UI', roboto, sans-serif;
+            --bg: #f8f7f3;
+            --panel: rgba(255, 255, 255, 0.72);
+            --panel-solid: #ffffff;
+            --text: #0f172a;
+            --muted: #475569;
+            --border: rgba(15, 23, 42, 0.14);
+            --border-strong: rgba(15, 23, 42, 0.22);
+            --accent: #f59e0b;
+            --accent-2: #14b8a6;
+            --accent-soft: rgba(245, 158, 11, 0.12);
+            --shadow: 0 20px 70px rgba(15, 23, 42, 0.12);
+            --shadow-soft: 0 10px 24px rgba(15, 23, 42, 0.10);
+            --radius: 14px;
+            --radius-sm: 10px;
+            --font-ui: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+            --font-display: 'Fraunces', ui-serif, Georgia, serif;
         }
 
         * {
@@ -28,38 +41,51 @@
         }
 
         body {
-            font-family: var(--font);
-            background: var(--bg);
+            font-family: var(--font-ui);
+            background:
+                radial-gradient(1100px 700px at 10% 10%, rgba(245, 158, 11, 0.18) 0%, rgba(245, 158, 11, 0) 60%),
+                radial-gradient(900px 650px at 90% 0%, rgba(20, 184, 166, 0.14) 0%, rgba(20, 184, 166, 0) 55%),
+                linear-gradient(180deg, #f8f7f3, #f4f3ee);
             color: var(--text);
             height: 100vh;
-            display: flex;
+            display: grid;
+            grid-template-columns: 380px 1fr minmax(420px, 560px);
             line-height: 1.5;
+            overflow: hidden;
         }
 
         /* Sidebar / Boxes */
         .sidebar {
-            width: 350px;
-            border-right: 2px solid var(--border);
-            padding: 1.5rem;
+            width: 380px;
+            border-right: 1px solid var(--border);
+            padding: 1.25rem;
             display: flex;
             flex-direction: column;
-            gap: 1.5rem;
+            gap: 1rem;
             overflow-y: auto;
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(10px);
+            height: 100vh;
+            min-width: 0;
         }
 
         .box {
-            border: 2px solid var(--border);
-            padding: 1.2rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1rem;
             display: flex;
             flex-direction: column;
-            gap: 0.8rem;
+            gap: 0.75rem;
+            background: var(--panel);
+            box-shadow: var(--shadow-soft);
         }
 
         h1 {
-            font-size: 1.4rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: -0.05em;
+            font-family: var(--font-display);
+            font-size: 1.55rem;
+            font-weight: 750;
+            text-transform: none;
+            letter-spacing: -0.03em;
         }
 
         .subtitle {
@@ -81,45 +107,80 @@
         select {
             width: 100%;
             border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
             padding: 0.6rem;
             font-family: inherit;
             font-size: 0.85rem;
             outline: none;
-            background: var(--bg);
+            background: var(--panel-solid);
+            box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.04);
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            border-color: rgba(245, 158, 11, 0.65);
+            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.16);
         }
 
         button {
-            border: 1px solid var(--border);
-            background: var(--border);
-            color: var(--bg);
-            padding: 0.6rem;
-            font-weight: 700;
+            border: 1px solid var(--border-strong);
+            background: var(--text);
+            color: var(--panel-solid);
+            padding: 0.55rem 0.9rem;
+            border-radius: 999px;
+            font-weight: 650;
             cursor: pointer;
-            text-transform: uppercase;
-            font-size: 0.75rem;
-            transition: all 0.1s;
+            text-transform: none;
+            font-size: 0.78rem;
+            letter-spacing: 0;
+            transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, color 120ms ease, border-color 120ms ease;
+            box-shadow: 0 10px 18px rgba(15, 23, 42, 0.10);
         }
 
         button:hover {
-            background: var(--bg);
-            color: var(--border);
+            transform: translateY(-1px);
+            background: #111827;
+            box-shadow: 0 14px 26px rgba(15, 23, 42, 0.14);
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Many UI buttons are "ghost" via inline styles; avoid giving them heavy elevation. */
+        button[style*="background:none"] {
+            box-shadow: none;
         }
 
         .list-container {
             max-height: 150px;
             overflow-y: auto;
             border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
             padding: 0.5rem;
+            background: rgba(255, 255, 255, 0.55);
+            box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.04);
         }
 
         .item {
             padding: 0.4rem;
             font-size: 0.75rem;
             cursor: pointer;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-radius: 10px;
+            transition: background 120ms ease, transform 120ms ease;
+        }
+
+        .item:hover {
+            background: rgba(245, 158, 11, 0.10);
+            transform: translateX(1px);
         }
 
         .actions {
@@ -156,14 +217,17 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
+            min-width: 0;
         }
 
         .chat-header {
             padding: 1.5rem;
-            border-bottom: 2px solid var(--border);
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(10px);
         }
 
         .chat-container {
@@ -176,19 +240,108 @@
         }
 
         .message {
-            max-width: 900px;
-            padding: 1.5rem;
+            max-width: 980px;
+            padding: 1.1rem 1.1rem;
             border: 1px solid var(--border);
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.78);
+            box-shadow: var(--shadow-soft);
             position: relative;
+            animation: floatIn 180ms ease-out both;
         }
 
         .message.user {
             align-self: flex-end;
-            background: var(--accent);
+            background: var(--accent-soft);
+            border-color: rgba(245, 158, 11, 0.28);
         }
 
         .message.ai {
             align-self: flex-start;
+        }
+
+        .message.loading {
+            border-color: rgba(15, 23, 42, 0.16);
+            background: rgba(255, 255, 255, 0.70);
+        }
+
+        .progress-row {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-top: 0.35rem;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid rgba(15, 23, 42, 0.20);
+            border-top-color: rgba(245, 158, 11, 0.95);
+            animation: spin 900ms linear infinite;
+            flex: 0 0 auto;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .progress-track {
+            height: 8px;
+            background: rgba(15, 23, 42, 0.08);
+            border-radius: 999px;
+            overflow: hidden;
+            flex: 1;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, rgba(245, 158, 11, 0.95), rgba(14, 165, 233, 0.85));
+            transition: width 240ms ease;
+        }
+
+        .progress-meta {
+            font-size: 0.62rem;
+            color: var(--muted);
+            margin-top: 0.3rem;
+            display: flex;
+            justify-content: space-between;
+            gap: 0.8rem;
+        }
+
+        .stuck-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(220, 38, 38, 0.20);
+            background: rgba(220, 38, 38, 0.08);
+            color: rgba(153, 27, 27, 1);
+            font-size: 0.6rem;
+            font-weight: 700;
+        }
+
+        .partial-preview {
+            margin-top: 0.6rem;
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.55);
+            padding: 0.55rem;
+        }
+
+        .partial-preview summary {
+            cursor: pointer;
+            font-size: 0.65rem;
+            font-weight: 650;
+        }
+
+        .partial-preview pre {
+            white-space: pre-wrap;
+            margin: 0.5rem 0 0;
+            font-size: 0.62rem;
+            color: var(--text);
         }
 
         .message .role-tag {
@@ -197,9 +350,10 @@
             position: absolute;
             top: -8px;
             left: 10px;
-            background: var(--bg);
-            padding: 0 4px;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 1px 8px;
             border: 1px solid var(--border);
+            border-radius: 999px;
         }
 
         /* Commenting UI */
@@ -215,20 +369,62 @@
 
         .input-area {
             padding: 1.5rem;
-            border-top: 2px solid var(--border);
+            border-top: 1px solid var(--border);
             display: flex;
             gap: 1rem;
-            background: var(--bg);
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(10px);
             position: relative;
             z-index: 10;
+        }
+
+        .right-panel {
+            border-left: 1px solid var(--border);
+            padding: 1.25rem 1.1rem;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(10px);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            min-width: 0;
         }
 
         .sources {
             margin-top: 0.8rem;
             font-size: 0.65rem;
             color: var(--muted);
-            border-top: 1px solid #eee;
+            border-top: 1px solid rgba(15, 23, 42, 0.10);
             padding-top: 0.4rem;
+        }
+
+        .debug {
+            margin-top: 0.8rem;
+            font-size: 0.65rem;
+            color: var(--text);
+            border: 1px dashed rgba(15, 23, 42, 0.22);
+            border-radius: var(--radius-sm);
+            padding: 0.7rem;
+            background: rgba(255, 255, 255, 0.55);
+        }
+
+        .debug-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 0.75rem;
+        }
+
+        .debug-head span {
+            font-size: 0.6rem;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        .debug-body {
+            margin-top: 0.35rem;
+            color: var(--text);
         }
 
         .source-list {
@@ -294,14 +490,19 @@
 
         .inspector-grid {
             display: grid;
-            grid-template-columns: 180px 1fr;
+            grid-template-columns: 200px 1fr;
             gap: 0.8rem;
+            flex: 1;
+            min-height: 0;
         }
 
         .inspector-list {
-            border: 1px solid #ddd;
-            max-height: 340px;
+            border: 1px solid rgba(15, 23, 42, 0.16);
+            border-radius: var(--radius-sm);
+            max-height: none;
+            height: 100%;
             overflow-y: auto;
+            background: rgba(255, 255, 255, 0.55);
         }
 
         .inspector-item {
@@ -317,12 +518,15 @@
         }
 
         .inspector-detail {
-            border: 1px solid #ddd;
+            border: 1px solid rgba(15, 23, 42, 0.16);
+            border-radius: var(--radius-sm);
             padding: 0.7rem;
-            min-height: 340px;
+            min-height: 0;
+            height: 100%;
             overflow-y: auto;
             font-size: 0.68rem;
             white-space: pre-wrap;
+            background: rgba(255, 255, 255, 0.55);
         }
 
         .message-content h1,
@@ -375,6 +579,44 @@
         .message-content ul,
         .message-content ol {
             margin: 0.3rem 0 0.45rem 1.2rem;
+        }
+
+        @keyframes floatIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 980px) {
+            body {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto;
+                height: auto;
+                overflow: auto;
+            }
+            .sidebar {
+                width: 100%;
+                max-height: 46vh;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+            }
+            .main-content {
+                height: auto;
+                min-height: 54vh;
+            }
+            .right-panel {
+                height: auto;
+                border-left: none;
+                border-top: 1px solid var(--border);
+            }
+            .chat-container {
+                padding: 1.2rem;
+            }
         }
     </style>
 </head>
@@ -441,7 +683,7 @@
         <div class="box requires-auth">
             <label>Word-mallar</label>
             <div id="templatesList" class="list-container">Laddar...</div>
-            <button onclick="document.getElementById('templateInput').click()">Ladda upp mall</button>
+            <button class="requires-admin" onclick="document.getElementById('templateInput').click()">Ladda upp mall</button>
             <input type="file" id="templateInput" hidden accept=".docx">
         </div>
 
@@ -515,6 +757,9 @@
                     <input type="checkbox" id="showCitations" checked style="width: auto;"> Visa källhänvisningar
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.3rem; margin: 0; cursor: pointer;">
+                    <input type="checkbox" id="showRetrievalDebug" style="width: auto;"> Visa vikter
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.3rem; margin: 0; cursor: pointer;">
                     <input type="checkbox" id="includeImagesExport" checked style="width: auto;"> Inkludera bilder i
                     export
                 </label>
@@ -528,6 +773,27 @@
                 <label style="display: flex; align-items: center; gap: 0.3rem; margin: 0; cursor: pointer;">
                     <input type="checkbox" id="longformMode" style="width: auto;"> Utförligt svar
                 </label>
+            </div>
+        </div>
+    </div>
+
+    <div id="rightPanel" class="right-panel requires-auth">
+        <div class="box" style="flex:1; min-height:0;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.8rem;">
+                <div style="flex:1;">
+                    <label>Källor</label>
+                    <div id="sourceInspectorHeader" style="font-size:0.68rem; color:var(--muted); margin-top:0.35rem;">
+                        Klicka på [S1] i svaret för att öppna en källa.
+                    </div>
+                </div>
+                <button onclick="clearSourceInspector()"
+                    style="background:none; color:var(--muted); border:1px solid var(--border); text-transform:none; font-size:0.7rem; box-shadow:none; width:auto;">
+                    Rensa
+                </button>
+            </div>
+            <div class="inspector-grid" style="margin-top:0.6rem; flex:1; min-height:0;">
+                <div id="sourceInspectorList" class="inspector-list"></div>
+                <div id="sourceInspectorDetail" class="inspector-detail">Välj en källa i listan.</div>
             </div>
         </div>
     </div>
@@ -656,19 +922,6 @@
         <button onclick="hideModal('docsModal')" style="background:none; color:black; margin-top: 1rem;">Stäng</button>
     </div>
 
-    <div id="sourceInspectorModal" class="box"
-        style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%); background:white; z-index:115; width:840px; box-shadow: 0 0 100px rgba(0,0,0,0.5); max-height:80vh; overflow-y:auto;">
-        <label>Källinspektor</label>
-        <div id="sourceInspectorHeader" style="font-size:0.68rem; color:var(--muted); margin-bottom:0.6rem;">Ingen källa
-            vald.</div>
-        <div class="inspector-grid">
-            <div id="sourceInspectorList" class="inspector-list"></div>
-            <div id="sourceInspectorDetail" class="inspector-detail">Välj en källa i listan.</div>
-        </div>
-        <button onclick="hideModal('sourceInspectorModal')"
-            style="background:none; color:black; margin-top: 0.8rem;">Stäng</button>
-    </div>
-
     <!-- Admin Dashboard -->
     <div id="adminModal" class="box"
         style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%); background:white; z-index:110; width:600px; box-shadow: 0 0 100px rgba(0,0,0,0.5); max-height:80vh; overflow-y:auto;">
@@ -752,13 +1005,18 @@
         function applyRoleVisibility() {
             const role = currentUserProfile?.role || "";
             const isSuperadmin = role === "SUPERADMIN";
+            const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
             document.querySelectorAll('.requires-superadmin').forEach(el => {
                 el.style.display = isSuperadmin ? 'block' : 'none';
+            });
+            document.querySelectorAll('.requires-admin').forEach(el => {
+                el.style.display = isAdmin ? 'block' : 'none';
             });
         }
 
         async function ensureIdToken(userHint = null, forceRefresh = false) {
-            const user = userHint || currentUser || auth.currentUser || null;
+            const authObj = (typeof auth !== "undefined") ? auth : (window.auth || null);
+            const user = userHint || currentUser || (authObj ? authObj.currentUser : null) || null;
             if (!user) {
                 idToken = null;
                 return null;
@@ -789,6 +1047,11 @@
                 return;
             }
             try {
+                // Indicate loading in sidebar lists while we refresh (prevents "stale" feel).
+                ["librariesList", "assistantsList", "templatesList", "projectsList"].forEach((id) => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerText = "Laddar...";
+                });
                 // Added cache-buster to avoid stale reads
                 const t = Date.now();
                 const [libs, assts, temps, projs, me] = await Promise.all([
@@ -812,9 +1075,9 @@
 
                 // Fill select boxes
                 const asstLibs = document.getElementById('asstLibs');
-                asstLibs.innerHTML = libs.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+                asstLibs.innerHTML = libs.map(l => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.name)}</option>`).join('');
                 const asstTemp = document.getElementById('asstTemplate');
-                asstTemp.innerHTML = `<option value="">Standardmall</option>` + temps.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+                asstTemp.innerHTML = `<option value="">Standardmall</option>` + temps.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
                 renderAssistantPriorityProfile(assistantPriorityDraft);
 
                 fetchConversations();
@@ -824,19 +1087,32 @@
             }
         }
 
-        // Reload data when auth state changes
-        auth.onAuthStateChanged(async (user) => {
-            if (user) {
-                await ensureIdToken(user);
-            } else {
-                idToken = null;
+        // Reload data when auth/token changes (waits for Firebase init)
+        let lastAuthRefresh = 0;
+        function setupAuthDataObserver() {
+            const authObj = (typeof auth !== "undefined") ? auth : (window.auth || null);
+            if (!authObj || typeof authObj.onIdTokenChanged !== "function") {
+                setTimeout(setupAuthDataObserver, 200);
+                return;
             }
-            await loadData();
-            if (!user) {
-                currentUserProfile = null;
-                applyRoleVisibility();
-            }
-        });
+            authObj.onIdTokenChanged(async (user) => {
+                const now = Date.now();
+                if (now - lastAuthRefresh < 500) return; // Prevent rapid firing
+                lastAuthRefresh = now;
+
+                if (user) {
+                    await ensureIdToken(user);
+                } else {
+                    idToken = null;
+                }
+                await loadData();
+                if (!user) {
+                    currentUserProfile = null;
+                    applyRoleVisibility();
+                }
+            });
+        }
+        setupAuthDataObserver();
 
         // Polling to keep lists in sync (every 60 seconds)
         setInterval(() => {
@@ -896,11 +1172,11 @@
 
                 return `
                 <div class="item">
-                    <span onclick='event.stopPropagation(); ${onClickFnName}(${itemJson})' style="flex:1; cursor:pointer;">${item.name}${isLib ? ` (P:${item.priority ?? 50})` : ""}${!isLib && item.model_preference ? ` [${item.model_preference}]` : ""}</span>
+                    <span onclick='event.stopPropagation(); ${onClickFnName}(${itemJson})' style="flex:1; cursor:pointer;">${escapeHtml(item.name)}${isLib ? ` (P:${escapeHtml(String(item.priority ?? 50))})` : ""}${!isLib && item.model_preference ? ` [${escapeHtml(String(item.model_preference))}]` : ""}</span>
                     <div class="actions">
                         ${currentProject && isLib ? `<span class="action-btn" onclick='event.stopPropagation(); addLibraryToProject("${item.id}")' title="Lägg till i aktivt projekt">🔗</span>` : ''}
                         ${currentProject && !isLib ? `<span class="action-btn" onclick='event.stopPropagation(); addAssistantToProject("${item.id}")' title="Lägg till i aktivt projekt">🔗</span>` : ''}
-                        ${isLib ? `<span class="action-btn" onclick='event.stopPropagation(); showDocuments("${item.id}", "${item.name}")' title="Visa filer">📁</span>` : ''}
+                        ${isLib ? `<span class="action-btn" onclick='event.stopPropagation(); showDocuments("${item.id}")' title="Visa filer">📁</span>` : ''}
                         ${isLib ? `<span class="action-btn" onclick='event.stopPropagation(); selectLibrary(${itemJson})' title="Ladda upp fil">📤</span>` : ''}
                         <span class="action-btn" onclick='event.stopPropagation(); openEditModal("${type}", ${itemJson})' title="Redigera">✎</span>
                         <span class="action-btn delete-btn" onclick='event.stopPropagation(); deleteResource("${type}", "${item.id}", event)' 
@@ -923,7 +1199,7 @@
                 return `
                 <div class="item">
                     <span onclick='event.stopPropagation(); selectProject("${p.id}")' style="flex:1; cursor:pointer;">
-                        ${p.name} ${isActive ? "(aktiv)" : ""}
+                        ${escapeHtml(p.name)} ${isActive ? "(aktiv)" : ""}
                     </span>
                 </div>
                 `;
@@ -1096,15 +1372,17 @@
         }
 
         function renderTemplates(temps) {
+            const role = currentUserProfile?.role || "";
+            const canEdit = role === "ADMIN" || role === "SUPERADMIN";
             document.getElementById('templatesList').innerHTML = temps.map(t => {
                 const key = `template-${t.id}`;
                 const isPending = pendingDeletes[key];
                 return `
                 <div class="item">
-                    <span style="flex:1;">${t.name}</span>
-                    <span class="action-btn delete-btn" onclick='event.stopPropagation(); deleteResource("template", "${t.id}", event)'
+                    <span style="flex:1;">${escapeHtml(t.name)}</span>
+                    ${canEdit ? `<span class="action-btn delete-btn" onclick='event.stopPropagation(); deleteResource("template", "${t.id}", event)'
                           style="${isPending ? 'color: #cc0000;' : ''}"
-                          title="Ta bort">${isPending ? 'Säker?' : '×'}</span>
+                          title="Ta bort">${isPending ? 'Säker?' : '×'}</span>` : ""}
                 </div>`;
             }).join('');
         }
@@ -1335,6 +1613,7 @@
             currentAssistant = asst;
             currentConversationId = Math.random().toString(36).substring(7); // New conv for session
             messageSourceMap = {};
+            clearSourceInspector();
             document.getElementById('activeHeader').innerText = `Aktiv: ${asst.name}`;
             const libCount = (asst.library_ids || []).length;
             const projectLabel = currentProject ? `Projekt: ${currentProject.name}` : `${libCount} bibliotek kopplade`;
@@ -1359,9 +1638,11 @@
                 el.innerHTML = convs.map(c => {
                     const key = `conv-${c.id}`;
                     const isPending = pendingDeletes[key];
+                    const title = String(c.title || "Konversation");
+                    const titleShort = title.length > 30 ? `${title.substring(0, 30)}...` : title;
                     return `
                     <div class="item">
-                        <span onclick='event.stopPropagation(); loadConversation("${c.id}")' style="flex:1; cursor:pointer;" title="${c.title}">${c.title.substring(0, 30)}...</span>
+                        <span onclick='event.stopPropagation(); loadConversation("${c.id}")' style="flex:1; cursor:pointer;" title="${escapeHtml(title)}">${escapeHtml(titleShort)}</span>
                         <span class="action-btn delete-btn" onclick='event.stopPropagation(); deleteConversation("${c.id}", event)'
                               style="${isPending ? 'color: #cc0000;' : ''}"
                               title="Ta bort">${isPending ? 'Säker?' : '×'}</span>
@@ -1377,6 +1658,7 @@
                 const res = await fetch(`/api/chat/conversations/${id}`, { headers: getAuthHeaders() });
                 const conv = await res.json();
                 currentConversationId = conv.id || id; // Ensure ID is set
+                clearSourceInspector();
                 // Find assistant
                 const asst = assistants.find(a => a.id === conv.assistant_id);
                 if (asst) {
@@ -1615,6 +1897,8 @@
                     else if (statusText === 'completed') { statusText = 'Klar'; statusColor = '#008000'; }
                     else if (statusText === 'failed') { statusText = 'Fel'; statusColor = '#ff0000'; }
 
+                    const safeFilename = escapeHtml(d.filename || "Okänd fil");
+                    const safeUploadedAt = escapeHtml(d.uploaded_at ? new Date(d.uploaded_at).toLocaleString('sv-SE') : "-");
                     const progress = typeof d.progress === "number" ? d.progress : null;
                     const total = d.total_chunks || 0;
                     const processed = d.processed_chunks || 0;
@@ -1625,7 +1909,7 @@
                            <div style="font-size:0.6rem; color:#666;">${progress}% (${processed}/${total})</div>`
                         : `<div style="font-size:0.6rem; color:#666;">—</div>`;
 
-                    const error = d.error ? `<div style="font-size:0.6rem; color:#c00; margin-top:4px;">${d.error}</div>` : '';
+                    const error = d.error ? `<div style="font-size:0.6rem; color:#c00; margin-top:4px;">${escapeHtml(d.error)}</div>` : '';
                     const gdprEnabled = !!d.gdpr_name_scrub;
                     const gdprMode = d.gdpr_scrub_mode || (gdprEnabled ? "NAMES_TO_DOCUMENT_CARD" : "—");
                     const gdprRepl = Number.isFinite(d.gdpr_scrub_replacements) ? d.gdpr_scrub_replacements : 0;
@@ -1636,19 +1920,19 @@
                     const gdprBy = d.gdpr_scrub_initiated_by || "-";
                     const gdprAt = d.gdpr_scrub_at ? new Date(d.gdpr_scrub_at).toLocaleString('sv-SE') : "-";
                     const gdprText = gdprEnabled
-                        ? `<div style="font-size:0.62rem;"><b>På</b> (${gdprMode})</div>
-                           <div style="font-size:0.6rem; color:#666;">Status: ${gdprStatus}</div>
-                           <div style="font-size:0.6rem; color:#666;">Ersättningar: ${gdprRepl}, kort: ${gdprCards}</div>
-                           <div style="font-size:0.6rem; color:#666;">${gdprProvider} / ${gdprModel}</div>
-                           <div style="font-size:0.6rem; color:#666;">Initierad av: ${gdprBy}</div>
-                           <div style="font-size:0.6rem; color:#666;">Tid: ${gdprAt}</div>`
+                        ? `<div style="font-size:0.62rem;"><b>På</b> (${escapeHtml(gdprMode)})</div>
+                           <div style="font-size:0.6rem; color:#666;">Status: ${escapeHtml(gdprStatus)}</div>
+                           <div style="font-size:0.6rem; color:#666;">Ersättningar: ${escapeHtml(String(gdprRepl))}, kort: ${escapeHtml(String(gdprCards))}</div>
+                           <div style="font-size:0.6rem; color:#666;">${escapeHtml(gdprProvider)} / ${escapeHtml(gdprModel)}</div>
+                           <div style="font-size:0.6rem; color:#666;">Initierad av: ${escapeHtml(gdprBy)}</div>
+                           <div style="font-size:0.6rem; color:#666;">Tid: ${escapeHtml(gdprAt)}</div>`
                         : `<div style="font-size:0.62rem; color:#666;">Av</div>`;
 
                     return `
                     <tr style="border-bottom: 1px solid #eee;">
-                        <td style="padding: 0.5rem;">${d.filename}</td>
-                        <td style="padding: 0.5rem;">${new Date(d.uploaded_at).toLocaleString('sv-SE')}</td>
-                        <td style="padding: 0.5rem;">${d.interpret_images ? `Ja (${d.images_indexed})` : 'Nej'}</td>
+                        <td style="padding: 0.5rem;">${safeFilename}</td>
+                        <td style="padding: 0.5rem;">${safeUploadedAt}</td>
+                        <td style="padding: 0.5rem;">${d.interpret_images ? `Ja (${escapeHtml(String(d.images_indexed || 0))})` : 'Nej'}</td>
                         <td style="padding: 0.5rem;">${gdprText}</td>
                         <td style="padding: 0.5rem;"><span style="color: ${statusColor}; font-weight: bold;">${statusText}</span>${error}</td>
                         <td style="padding: 0.5rem;">${bar}</td>
@@ -1662,6 +1946,10 @@
         }
 
         async function showDocuments(libId, libName) {
+            if (!libName) {
+                const lib = (libraries || []).find(l => String(l.id) === String(libId));
+                libName = lib?.name || libId || "Okänt bibliotek";
+            }
             currentDocsLibId = libId;
             currentDocsLibName = libName;
             document.getElementById('docsTableBody').innerHTML = '<tr><td colspan="6" style="padding: 1rem; text-align: center;">Laddar filer...</td></tr>';
@@ -1972,8 +2260,21 @@
                 return;
             }
             sourceInspectorMessageId = messageId;
-            showModal('sourceInspectorModal');
             renderSourceInspector(sources, preferredRef);
+            const panel = document.getElementById('rightPanel');
+            if (panel && window.matchMedia && window.matchMedia('(max-width: 980px)').matches) {
+                panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        function clearSourceInspector() {
+            const listEl = document.getElementById('sourceInspectorList');
+            const detailEl = document.getElementById('sourceInspectorDetail');
+            const headerEl = document.getElementById('sourceInspectorHeader');
+            if (listEl) listEl.innerHTML = "";
+            if (detailEl) detailEl.innerText = "Välj en källa i listan.";
+            if (headerEl) headerEl.innerText = "Klicka på [S1] i svaret för att öppna en källa.";
+            sourceInspectorMessageId = null;
         }
 
         function renderSourceInspector(sources, preferredRef = null) {
@@ -2029,6 +2330,144 @@
             }
         });
 
+        function sleep(ms) {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+
+        function formatChatStageLabel(stage, status) {
+            const s = String(stage || "").toLowerCase();
+            const st = String(status || "").toLowerCase();
+            if (st === "completed") return "Klar";
+            if (st === "failed") return "Fel";
+            const map = {
+                "queued": "I kö",
+                "starting": "Startar",
+                "preprocess": "Förbereder",
+                "retrieval": "Hämtar källor",
+                "retrieval_done": "Källunderlag klart",
+                "generate": "Genererar",
+                "outline": "Disposition",
+                "writing": "Skriver",
+                "verify_section": "Verifierar avsnitt",
+                "verify": "Kvalitetssäkrar",
+                "finalize": "Sparar",
+                "completed": "Klar",
+                "failed": "Fel"
+            };
+            return map[s] || (s ? s : "Bearbetar");
+        }
+
+        function formatElapsed(ms) {
+            const totalSeconds = Math.max(0, Math.floor((ms || 0) / 1000));
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            if (minutes < 60) return `${minutes}:${String(seconds).padStart(2, "0")}`;
+            const hours = Math.floor(minutes / 60);
+            const mm = minutes % 60;
+            return `${hours}h ${mm}m`;
+        }
+
+        function stuckThresholdForStage(stage) {
+            const s = String(stage || "").toLowerCase();
+            if (s === "writing" || s === "verify_section") return 60000;
+            if (s === "verify" || s === "generate" || s === "outline") return 45000;
+            return 20000;
+        }
+
+        function initProgressMessage(loadingEl) {
+            if (!loadingEl) return null;
+            loadingEl.classList.add("loading");
+            const contentEl = loadingEl.querySelector(".message-content");
+            if (!contentEl) return null;
+            contentEl.innerHTML = `
+                <div style="font-weight:750;">Bearbetar...</div>
+                <div class="progress-row">
+                    <div class="spinner"></div>
+                    <div class="progress-track"><div class="progress-fill"></div></div>
+                </div>
+                <div class="progress-meta">
+                    <div class="progress-stage">I kö (0%)</div>
+                    <div class="progress-time">Tid: 0:00</div>
+                </div>
+                <div class="progress-message" style="margin-top:0.25rem; font-size:0.7rem; color:var(--text);"></div>
+                <div class="stuck-container" style="margin-top:0.35rem;"></div>
+                <div class="partial-container"></div>
+            `;
+            return {
+                fill: contentEl.querySelector(".progress-fill"),
+                stage: contentEl.querySelector(".progress-stage"),
+                time: contentEl.querySelector(".progress-time"),
+                msg: contentEl.querySelector(".progress-message"),
+                stuck: contentEl.querySelector(".stuck-container"),
+                partial: contentEl.querySelector(".partial-container"),
+            };
+        }
+
+        function updateProgressMessage(refs, job, startedAtMs) {
+            if (!refs || !job) return;
+            const status = String(job.status || "").toLowerCase();
+            const stage = String(job.stage || "").toLowerCase();
+            const progress = Number.isFinite(job.progress)
+                ? job.progress
+                : (parseInt(String(job.progress || "0"), 10) || 0);
+            const pct = Math.max(0, Math.min(progress, 100));
+            const label = formatChatStageLabel(stage, status);
+
+            if (refs.fill) refs.fill.style.width = `${pct}%`;
+            if (refs.stage) refs.stage.textContent = `${label} (${pct}%)`;
+            if (refs.time) refs.time.textContent = `Tid: ${formatElapsed(Date.now() - startedAtMs)}`;
+            if (refs.msg) refs.msg.textContent = job.message || "";
+
+            const serverUpdatedMs = job.updated_at ? Math.floor(Number(job.updated_at) * 1000) : startedAtMs;
+            const lagMs = Date.now() - serverUpdatedMs;
+            const threshold = stuckThresholdForStage(stage);
+            if (refs.stuck) {
+                if (status === "running" && lagMs > threshold) {
+                    const secs = Math.round(lagMs / 1000);
+                    refs.stuck.innerHTML = `<span class="stuck-badge">Ingen uppdatering på ${secs}s. Det kan ta tid vid långa dokument.</span>`;
+                } else {
+                    refs.stuck.innerHTML = "";
+                }
+            }
+
+            if (refs.partial) {
+                const pa = String(job.partial_answer || "").trim();
+                if (pa) {
+                    const tail = pa.length > 2000 ? pa.slice(-2000) : pa;
+                    refs.partial.innerHTML = `<details class="partial-preview"><summary>Förhandsvisning (senaste)</summary><pre>${escapeHtml(tail)}</pre></details>`;
+                } else {
+                    refs.partial.innerHTML = "";
+                }
+            }
+        }
+
+        async function pollChatJob(jobId, loadingEl, startedAtMs) {
+            const refs = initProgressMessage(loadingEl);
+            // Prime UI immediately
+            updateProgressMessage(refs, { status: "queued", stage: "queued", progress: 0, message: "" }, startedAtMs);
+
+            while (true) {
+                const res = await fetch(`/api/chat/jobs/${encodeURIComponent(jobId)}`, { headers: getAuthHeaders() });
+                if (!res.ok) {
+                    let message = "Kunde inte läsa jobbstatus.";
+                    try {
+                        const err = await res.json();
+                        message = formatApiError(err.detail, message);
+                    } catch (e) { }
+                    throw new Error(message);
+                }
+                const job = await res.json();
+                updateProgressMessage(refs, job, startedAtMs);
+
+                const status = String(job.status || "").toLowerCase();
+                if (status === "completed") return job;
+                if (status === "failed") throw new Error(job.error || "Jobbet misslyckades.");
+
+                const delay = document.hidden ? 2500 : 900;
+                await sleep(delay);
+            }
+        }
+
         async function handleSend() {
             // Backend handles auth (dev fallback in development mode)
             const query = document.getElementById('userInput').value;
@@ -2046,10 +2485,11 @@
             addMessage(query, 'user');
             document.getElementById('userInput').value = '';
             sendBtn.disabled = true;
-            const loadingEl = addMessage("Assistenten analyserar källor och strukturerar svaret...", 'ai', null, null, false);
+            const loadingEl = addMessage("Bearbetar...", 'ai', null, null, false);
 
             try {
-                const res = await fetch('/api/chat/ask', {
+                const startedAtMs = Date.now();
+                const startRes = await fetch('/api/chat/ask-async', {
                     method: 'POST',
                     headers: getAuthHeaders(),
                     body: JSON.stringify({
@@ -2065,15 +2505,48 @@
                         response_mode: responseMode
                     })
                 });
-                if (!res.ok) {
-                    const errorData = await res.json();
-                    throw new Error(formatApiError(errorData.detail, "Misslyckades att skicka meddelande"));
+                if (!startRes.ok) {
+                    const errorData = await startRes.json();
+                    throw new Error(formatApiError(errorData.detail, "Misslyckades att starta generering"));
                 }
-                const data = await res.json();
+
+                const startData = await startRes.json();
+                const job = await pollChatJob(startData.job_id, loadingEl, startedAtMs);
+
                 if (loadingEl && loadingEl.parentNode) loadingEl.remove();
-                lastResponse = data;
+                let answer = job.answer || "";
+                let sources = job.sources || [];
+                let matchedImages = job.matched_images || [];
+                const debug = job.debug || {};
+
+                // If the job store does not carry the full payload (common in production),
+                // read the latest AI message from the conversation record instead.
+                if ((!answer || !sources || sources.length === 0) && currentConversationId) {
+                    try {
+                        const convRes = await fetch(`/api/chat/conversations/${encodeURIComponent(currentConversationId)}`, { headers: getAuthHeaders() });
+                        if (convRes.ok) {
+                            const conv = await convRes.json();
+                            const messages = Array.isArray(conv?.messages) ? conv.messages : [];
+                            const lastAi = [...messages].reverse().find(m => m && m.role === 'ai');
+                            if (lastAi) {
+                                answer = String(lastAi.content || answer || "");
+                                sources = Array.isArray(lastAi.sources) ? lastAi.sources : (sources || []);
+                                matchedImages = Array.isArray(lastAi.matched_images) ? lastAi.matched_images : (matchedImages || []);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("Conversation fetch fallback failed:", e);
+                    }
+                }
+
+                lastResponse = {
+                    answer: answer || "",
+                    sources: sources || [],
+                    matched_images: matchedImages || [],
+                    debug: debug || {}
+                };
                 lastResponse.query = query;
-                addMessage(data.answer || "Inget svar returnerades", 'ai', data.sources, data.matched_images);
+                addMessage(answer || "Inget svar returnerades", 'ai', sources, matchedImages, true, debug || null);
                 document.getElementById('exportBtn').disabled = false;
                 fetchConversations();
             } catch (err) {
@@ -2085,7 +2558,7 @@
             }
         }
 
-        function addMessage(text, role, sources = null, matchedImages = null, showCommentButton = true) {
+        function addMessage(text, role, sources = null, matchedImages = null, showCommentButton = true, debug = null) {
             if (text === undefined || text === null) text = "...";
             const div = document.createElement('div');
             div.className = `message ${role}`;
@@ -2119,6 +2592,29 @@
                 div.appendChild(imgWrap);
             }
 
+            if (role === 'ai' && debug && document.getElementById('showRetrievalDebug')?.checked) {
+                const dbg = document.createElement('div');
+                dbg.className = 'debug';
+                const plan = Array.isArray(debug.library_plan) ? debug.library_plan : [];
+                const modelLabel = debug?.model?.primary || "";
+                const srcCount = Number.isFinite(debug?.source_count) ? debug.source_count : (sources ? sources.length : 0);
+                const planLines = plan.slice(0, 12).map((l) => {
+                    const name = l?.name || l?.id || "okänt";
+                    const type = l?.type || "-";
+                    const prio = (l?.priority !== undefined && l?.priority !== null) ? String(l.priority) : "-";
+                    const src = l?.priority_source === "assistant_override" ? "assistent" : "bibliotek";
+                    return `<div>• ${escapeHtml(name)} <span style="color:var(--muted);">(${escapeHtml(type)})</span> <b>${escapeHtml(prio)}</b> <span style="color:var(--muted);">(${escapeHtml(src)})</span></div>`;
+                }).join('');
+                dbg.innerHTML = `
+                    <div class="debug-head">
+                        <b>Underlag & vikter</b>
+                        <span>${escapeHtml(String(srcCount))} källor${modelLabel ? ` • ${escapeHtml(modelLabel)}` : ""}</span>
+                    </div>
+                    <div class="debug-body">${planLines || '<div style="color:var(--muted);">Ingen viktningsdata.</div>'}</div>
+                `;
+                div.appendChild(dbg);
+            }
+
             // Optional: Comment button
             if (role === 'ai' && showCommentButton) {
                 const btn = document.createElement('button');
@@ -2139,6 +2635,12 @@
 
             document.getElementById('chatContainer').appendChild(div);
             document.getElementById('chatContainer').scrollTop = document.getElementById('chatContainer').scrollHeight;
+
+            // Auto-sync right panel to the latest AI answer with sources (NotebookLM-like flow).
+            if (role === 'ai' && sources && sources.length > 0) {
+                sourceInspectorMessageId = messageId;
+                renderSourceInspector(sources, null);
+            }
             return div;
         }
 

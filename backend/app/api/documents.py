@@ -2,6 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Backgro
 import shutil
 import os
 import uuid
+import re
 from datetime import datetime
 from typing import Optional
 from backend.app.services.ingestion import ingestion_service
@@ -19,6 +20,7 @@ router = APIRouter()
 UPLOAD_DIR = "temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
+_FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._() -]+")
 
 
 def _validate_upload_filename(filename: str):
@@ -31,6 +33,13 @@ def _validate_upload_filename(filename: str):
             status_code=400,
             detail=f"Filtypen stöds inte ({extension or 'okänd'}). Tillåtna format: {allowed}."
         )
+
+
+def _sanitize_upload_filename(filename: str) -> str:
+    base = os.path.basename(filename or "").strip()
+    base = _FILENAME_SAFE_RE.sub("_", base)
+    base = re.sub(r"\s+", " ", base).strip()
+    return base or "upload"
 
 
 def _get_or_create_attachment_library(conversation_id: str, current_user: UserProfile) -> str:
@@ -109,6 +118,7 @@ async def upload_document(
     current_user: UserProfile = Depends(get_current_user)
 ):
     _validate_upload_filename(file.filename)
+    safe_name = _sanitize_upload_filename(file.filename)
     lib_ref = db.collection("libraries").document(library_id)
     doc_snap = lib_ref.get()
     
@@ -129,7 +139,7 @@ async def upload_document(
     if lib_data.get("owner_id") != current_user.id and current_user.role not in ["ADMIN", "SUPERADMIN"]:
         raise HTTPException(status_code=403, detail="Not authorized to upload to this library")
     
-    file_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{file.filename}")
+    file_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{safe_name}")
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -138,7 +148,7 @@ async def upload_document(
         background_tasks.add_task(
             ingestion_service.process_document,
             file_path, 
-            file.filename, 
+            safe_name, 
             library_id,
             interpret_images=interpret_images,
             gdpr_name_scrub=effective_gdpr_name_scrub,
@@ -147,8 +157,8 @@ async def upload_document(
         
         return {
             "status": "accepted",
-            "message": f"Filen {file.filename} har tagits emot och bearbetas nu i bakgrunden.",
-            "filename": file.filename,
+            "message": f"Filen {safe_name} har tagits emot och bearbetas nu i bakgrunden.",
+            "filename": safe_name,
             "gdpr_name_scrub": effective_gdpr_name_scrub
         }
     except Exception as e:
@@ -170,6 +180,7 @@ async def upload_document_to_conversation(
     current_user: UserProfile = Depends(get_current_user)
 ):
     _validate_upload_filename(file.filename)
+    safe_name = _sanitize_upload_filename(file.filename)
     effective_gdpr_name_scrub = bool(gdpr_name_scrub)
     if effective_gdpr_name_scrub and not scrubber_service.is_configured():
         raise HTTPException(
@@ -178,7 +189,7 @@ async def upload_document_to_conversation(
         )
     library_id = _get_or_create_attachment_library(conversation_id, current_user)
 
-    file_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{file.filename}")
+    file_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{safe_name}")
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -205,7 +216,7 @@ async def upload_document_to_conversation(
                 raise HTTPException(status_code=403, detail="Not authorized to update this conversation")
             payload = {
                 "attachment_inline_texts": firestore.ArrayUnion([{
-                    "filename": file.filename,
+                    "filename": safe_name,
                     "text": inline_text,
                     "chars": len(inline_text),
                     "gdpr_name_scrub": effective_gdpr_name_scrub,
@@ -219,7 +230,7 @@ async def upload_document_to_conversation(
         background_tasks.add_task(
             ingestion_service.process_document,
             file_path,
-            file.filename,
+            safe_name,
             library_id,
             interpret_images=interpret_images,
             gdpr_name_scrub=effective_gdpr_name_scrub,
@@ -229,8 +240,8 @@ async def upload_document_to_conversation(
 
         return {
             "status": "accepted",
-            "message": f"Filen {file.filename} har bifogats till konversationen och bearbetas nu.",
-            "filename": file.filename,
+            "message": f"Filen {safe_name} har bifogats till konversationen och bearbetas nu.",
+            "filename": safe_name,
             "gdpr_name_scrub": effective_gdpr_name_scrub
         }
     except Exception as e:

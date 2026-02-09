@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from backend.app.api import documents, chat, export, assistants, libraries, templates, admin, images, users, projects, health
+from backend.app.api import documents, chat, export, assistants, libraries, templates, admin, images, users, projects, health, config
 from backend.app.core.config import settings
 
 app = FastAPI(title="Textbehandlaren", description="Intelligent Document Manager")
@@ -28,6 +28,7 @@ app.include_router(health.router, prefix="/api/health", tags=["health"])
 app.include_router(images.router, prefix="/api/images", tags=["images"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
+app.include_router(config.router, prefix="/api/config", tags=["config"])
 
 # Serve static files last - this catches all remaining requests
 app.mount("/static", StaticFiles(directory="backend/app/static", html=False), name="static_files")

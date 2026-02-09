@@ -1,11 +1,20 @@
-from fastapi.testclient import TestClient
-from backend.app.main import app
 import os
 import pytest
+from fastapi.testclient import TestClient
+
+# Ensure local dev auth bypass is enabled for tests that call protected endpoints.
+# Must be set before importing the FastAPI app (settings load at import time).
+os.environ.setdefault("ENVIRONMENT", "development")
+os.environ.setdefault("DEV_AUTH_BYPASS", "true")
+
+from backend.app.main import app
 
 client = TestClient(app)
 
 def test_docx_upload():
+    if os.environ.get("RUN_FIRESTORE_TESTS") != "1":
+        pytest.skip("Requires Firestore access (set RUN_FIRESTORE_TESTS=1 to enable).")
+
     # 1. Create a library
     # Note: We don't send Authorization header to trigger dev user fallback in auth.py
     lib_response = client.post("/api/libraries", json={
