@@ -119,6 +119,8 @@ class FirestoreJobStore:
 
     def __init__(self, collection_name: str = "chat_jobs"):
         from backend.app.core.firebase import db  # lazy import to avoid early init issues
+        if not db:
+            raise RuntimeError("Firestore client is not initialized (missing/invalid FIREBASE_CREDENTIALS).")
         self._col = db.collection(collection_name)
 
     def _doc_to_job(self, doc_id: str, data: dict) -> ChatJob:
@@ -222,12 +224,21 @@ class FirestoreJobStore:
 def _select_job_store():
     backend = (os.getenv("JOB_STORE_BACKEND") or "").strip().lower()
     if backend in {"firestore", "fs"}:
-        return FirestoreJobStore()
+        try:
+            return FirestoreJobStore()
+        except Exception as e:
+            print(f"Failed to initialize FirestoreJobStore: {e}. Falling back to in-memory JobStore.")
+            return JobStore()
 
     try:
         from backend.app.core.config import settings
         if (settings.ENVIRONMENT or "").strip().lower() == "production":
-            return FirestoreJobStore()
+            try:
+                return FirestoreJobStore()
+            except Exception as e:
+                # Avoid hard-crashing the whole app on import when Firebase isn't configured yet.
+                print(f"Failed to initialize FirestoreJobStore in production: {e}. Falling back to in-memory JobStore.")
+                return JobStore()
     except Exception:
         pass
 
