@@ -1,3 +1,4 @@
+import os
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -8,7 +9,8 @@ class Settings(BaseSettings):
     # CORS: Comma-separated list of allowed origins
     ALLOWED_ORIGINS: str = "http://localhost:8001,http://localhost:8000"
     
-    CHROMA_DB_PATH: str = "/tmp/chroma_db" if os.getenv("ENVIRONMENT") == "production" else "./chroma_db"
+    # Default; we adjust below based on ENVIRONMENT unless explicitly set.
+    CHROMA_DB_PATH: str = "./chroma_db"
     COLLECTION_NAME: str = "antigravity_docs"
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
@@ -48,16 +50,20 @@ INSTRUKTIONER:
 
 
     class Config:
-        import os
         # Look for .env in the current directory, or in the backend directory relative to this file
         _env_path = ".env"
         if not os.path.exists(_env_path):
-             _base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-             _env_path = os.path.join(_base_dir, ".env")
+            _base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            _env_path = os.path.join(_base_dir, ".env")
         
         env_file = _env_path
 
 settings = Settings()
+
+if "CHROMA_DB_PATH" not in os.environ:
+    # Prefer /tmp in production (writable on serverless).
+    if settings.ENVIRONMENT == "production" and settings.CHROMA_DB_PATH == "./chroma_db":
+        settings.CHROMA_DB_PATH = "/tmp/chroma_db"
 
 # Default: allow local fallback only in development if not explicitly set
 import os as _os

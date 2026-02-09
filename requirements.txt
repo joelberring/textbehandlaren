@@ -3,13 +3,11 @@ uvicorn
 langchain
 langchain-community
 langchain-anthropic
-chromadb
 pymupdf
 python-docx
 docx2txt
 pydantic-settings
 python-multipart
-sentence-transformers
 mistralai
 docxtpl
 firebase-admin

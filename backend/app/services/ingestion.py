@@ -13,7 +13,6 @@ from backend.app.core.storage import upload_image
 from google.cloud.firestore_v1.vector import Vector
 from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 from backend.app.services.embeddings import get_embeddings
-from backend.app.services import vectorstore
 from backend.app.services.scrubber import scrubber_service
 from langchain_core.documents import Document
 
@@ -415,6 +414,8 @@ class IngestionService:
             fallback_docs = []
             for lib_id in library_ids:
                 try:
+                    # Optional dependency: only import when fallback is enabled/needed.
+                    from backend.app.services import vectorstore
                     local_results = vectorstore.search(lib_id, query, k=k)
                     print(f"Chroma fallback returned {len(local_results)} results for library {lib_id}")
                     fallback_docs.extend(local_results)

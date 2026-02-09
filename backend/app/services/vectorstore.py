@@ -1,9 +1,11 @@
 import re
-from typing import List
-from langchain_community.vectorstores import Chroma
+from typing import List, TYPE_CHECKING
 from langchain_core.documents import Document
 from backend.app.services.embeddings import get_embeddings
 from backend.app.core.config import settings
+
+if TYPE_CHECKING:
+    from langchain_community.vectorstores import Chroma
 
 
 def _sanitize_collection_name(library_id: str) -> str:
@@ -11,9 +13,16 @@ def _sanitize_collection_name(library_id: str) -> str:
     return f"library_{safe}"
 
 
-def get_store(library_id: str) -> Chroma:
+def get_store(library_id: str):
     if not settings.ALLOW_LOCAL_FALLBACK:
         raise RuntimeError("Local vectorstore fallback is disabled.")
+    try:
+        from langchain_community.vectorstores import Chroma  # type: ignore
+    except Exception as exc:
+        raise RuntimeError(
+            "Local vectorstore fallback requires optional Chroma deps. "
+            "Install 'chromadb' (and langchain-community extras) to enable it."
+        ) from exc
     return Chroma(
         collection_name=_sanitize_collection_name(library_id),
         embedding_function=get_embeddings(),

@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local data / outputs
+chroma_db/
+exports/
+temp_uploads/
+*.db
+*.log
+
+# Tests and caches
+tests/
+.pytest_cache/
+
+# Secrets (should not be deployed)
+service-account.json
+backend/service-account.json
+
+# OS junk
+.DS_Store
