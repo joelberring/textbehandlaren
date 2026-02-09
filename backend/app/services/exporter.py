@@ -19,11 +19,16 @@ class ExporterService:
     _MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8MB safeguard
 
     def __init__(self):
-        self.output_dir = "exports"
-        self.template_dir = "backend/app/templates"
+        is_prod = os.getenv("ENVIRONMENT") == "production"
+        self.output_dir = "/tmp/exports" if is_prod else "exports"
+        self.template_dir = "/tmp/templates" if is_prod else "backend/app/templates"
         self.template_path = os.path.join(self.template_dir, "template.docx")
-        os.makedirs(self.output_dir, exist_ok=True)
-        os.makedirs(self.template_dir, exist_ok=True)
+        
+        try:
+            os.makedirs(self.output_dir, exist_ok=True)
+            os.makedirs(self.template_dir, exist_ok=True)
+        except Exception as e:
+            print(f"Warning: ExporterService could not create directories: {e}")
         
         # Ensure a template exists
         if not os.path.exists(self.template_path):

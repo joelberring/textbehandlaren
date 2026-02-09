@@ -10,8 +10,11 @@ from datetime import datetime
 
 router = APIRouter()
 
-TEMPLATE_DIR = "backend/app/templates"
-os.makedirs(TEMPLATE_DIR, exist_ok=True)
+TEMPLATE_DIR = "/tmp/templates" if os.getenv("ENVIRONMENT") == "production" else "backend/app/templates"
+try:
+    os.makedirs(TEMPLATE_DIR, exist_ok=True)
+except Exception as e:
+    print(f"Warning: Could not create TEMPLATE_DIR {TEMPLATE_DIR}: {e}")
 
 _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._() -]+")
 
