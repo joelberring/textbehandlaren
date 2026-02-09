@@ -3,6 +3,7 @@ uvicorn
 langchain
 langchain-community
 langchain-anthropic
+langchain-text-splitters
 pypdf
 python-docx
 docx2txt
