@@ -3,7 +3,7 @@ uvicorn
 langchain
 langchain-community
 langchain-anthropic
-pymupdf
+pypdf
 python-docx
 docx2txt
 pydantic-settings
@@ -13,4 +13,3 @@ docxtpl
 firebase-admin
 google-cloud-firestore
 requests
-Pillow

@@ -1,9 +1,6 @@
-import fitz  # PyMuPDF
 from backend.app.core.config import settings
 from langchain_anthropic import ChatAnthropic
 import base64
-import io
-from PIL import Image
 
 class VisionService:
     def __init__(self):
@@ -13,6 +10,12 @@ class VisionService:
         )
 
     def extract_images_from_pdf(self, pdf_path: str):
+        try:
+            import fitz  # type: ignore  # PyMuPDF (optional)
+        except Exception:
+            # Image extraction is optional; skip if PyMuPDF isn't installed.
+            return []
+
         doc = fitz.open(pdf_path)
         image_descriptions = []
 

@@ -12,8 +12,7 @@ from backend.app.schemas.user import UserProfile
 from backend.app.core.config import settings
 from backend.app.services.scrubber import scrubber_service
 from google.cloud import firestore
-from langchain_community.document_loaders import PyMuPDFLoader, Docx2txtLoader, TextLoader
-import fitz
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
 
 router = APIRouter()
 
@@ -84,13 +83,25 @@ def _extract_inline_text_if_small(file_path: str) -> str:
     extension = os.path.splitext(file_path)[1].lower()
     text = ""
     if extension == ".pdf":
+        page_count = None
         try:
-            doc = fitz.open(file_path)
-            if doc.page_count > settings.DIRECT_ATTACHMENT_MAX_PAGES:
-                return ""
+            from pypdf import PdfReader  # type: ignore
+
+            reader = PdfReader(file_path)
+            page_count = len(reader.pages)
         except Exception:
+            # Dev fallback: allow PyMuPDF if available locally.
+            try:
+                import fitz  # type: ignore
+
+                doc = fitz.open(file_path)
+                page_count = int(getattr(doc, "page_count", 0) or 0)
+            except Exception:
+                return ""
+
+        if page_count and page_count > settings.DIRECT_ATTACHMENT_MAX_PAGES:
             return ""
-        loader = PyMuPDFLoader(file_path)
+        loader = PyPDFLoader(file_path)
         docs = loader.load()
         text = "\n".join([d.page_content for d in docs])
     elif extension == ".docx":

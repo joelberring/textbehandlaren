@@ -3,8 +3,7 @@ import uuid
 import re
 from typing import List
 from datetime import datetime
-import fitz  # PyMuPDF for image extraction
-from langchain_community.document_loaders import PyMuPDFLoader, Docx2txtLoader, TextLoader
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from backend.app.core.config import settings
 from backend.app.core.firebase import db
@@ -138,7 +137,7 @@ class IngestionService:
             # 1. Load document (Sync IO)
             def load_doc():
                 if extension == ".pdf":
-                    loader = PyMuPDFLoader(file_path)
+                    loader = PyPDFLoader(file_path)
                 elif extension == ".docx":
                     loader = Docx2txtLoader(file_path)
                 elif extension == ".txt":
@@ -314,6 +313,12 @@ class IngestionService:
 
     async def _extract_and_index_images(self, pdf_path: str, source_filename: str, library_id: str, source_doc_id: str) -> int:
         """Extract images from PDF, upload to Storage, and index in Firestore."""
+        try:
+            import fitz  # type: ignore  # PyMuPDF (optional)
+        except Exception:
+            print("PyMuPDF (fitz) is not installed; skipping PDF image extraction.")
+            return 0
+
         doc = fitz.open(pdf_path)
         images_count = 0
         embeddings = get_embeddings()
