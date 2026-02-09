@@ -40,10 +40,13 @@ def initialize_firebase():
             if not firebase_admin._apps:
                 firebase_admin.initialize_app()
 
-    try:
-        return firestore.client()
     except Exception as e:
-        print(f"Failed to initialize Firestore client: {e}")
-        raise
+        print(f"CRITICAL: Failed to initialize Firestore client: {e}")
+        # Don't raise here, let the app start so we can see the logs
+        return None
 
-db = initialize_firebase()
+try:
+    db = initialize_firebase()
+except Exception as e:
+    print(f"CRITICAL: Firebase initialization failed: {e}")
+    db = None

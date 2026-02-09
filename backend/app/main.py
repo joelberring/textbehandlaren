@@ -30,16 +30,20 @@ app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(config.router, prefix="/api/config", tags=["config"])
 
+# Path setup for static files
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+
 # Serve static files last - this catches all remaining requests
-app.mount("/static", StaticFiles(directory="backend/app/static", html=False), name="static_files")
+app.mount("/static", StaticFiles(directory=STATIC_DIR, html=False), name="static_files")
 
 # For serving index.html at root
 from fastapi.responses import FileResponse
-import os
 
 @app.get("/")
 async def serve_root():
-    return FileResponse("backend/app/static/index.html")
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    return FileResponse(index_path)
 
 if __name__ == "__main__":
     import uvicorn
