@@ -1,9 +1,4 @@
 {
-    "functions": {
-        "backend/app/main.py": {
-            "maxDuration": 10
-        }
-    },
     "builds": [
         {
             "src": "backend/app/main.py",
