@@ -252,6 +252,29 @@ KÄLLUTDRAG:
         question_like = ["vad", "vem", "var", "när", "hur", "kan du", "finns", "är det"]
         return any(s in q for s in question_like) or len(q.split()) <= 12
 
+    def _looks_like_non_draft_ai_message(self, text: str) -> bool:
+        """
+        Conversation history stores the last AI message as "current_draft".
+        If that message is an error/diagnostic, using it as a draft will pollute
+        subsequent generations (e.g. the error gets embedded into a new document).
+        """
+        tl = (text or "").strip().lower()
+        if not tl:
+            return True
+        known_bad_fragments = [
+            "jag hittar inga källor i dina bibliotek",
+            "jag kan tyvärr inte skapa ett källbelagt svar",
+            "filen/filerna bearbetas fortfarande",
+            "ett fel uppstod",
+            "klicka på [s1] i svaret för att öppna en källa",
+        ]
+        if any(f in tl for f in known_bad_fragments):
+            return True
+        # Very short replies without any structure are rarely a "draft".
+        if len(tl) < 140 and not any(x in tl for x in ["# ", "## ", "\n\n", "bakgrund", "sammanfattning"]):
+            return True
+        return False
+
     def _is_smalltalk(self, query: str) -> bool:
         """
         Detect short "ping"/greeting inputs where retrieval + strict citations tend to be noise.
@@ -273,6 +296,19 @@ KÄLLUTDRAG:
             "ok", "okej", "tack",
         }
         return tokens[0] in greetings
+
+    def _is_summary_request(self, query: str) -> bool:
+        """
+        Detect "summarize the attached/document" requests.
+        These are short but NOT simple: they require deeper retrieval than base simple_mode.
+        """
+        ql = (query or "").lower()
+        if not ql:
+            return False
+        if any(t in ql for t in ["sammanfatt", "summer", "översikt", "kort sammanfatt", "tl;dr"]):
+            if any(t in ql for t in ["bifog", "bilag", "fil", "dokument", "rapport", "pdf", "docx"]):
+                return True
+        return False
 
     def _query_likely_needs_sources(self, query: str) -> bool:
         """
@@ -535,25 +571,32 @@ KÄLLUTDRAG:
         if response_mode not in ["auto", "fast", "standard", "deep"]:
             response_mode = "auto"
 
+        is_smalltalk = self._is_smalltalk(scrubbed_query)
+        needs_sources = self._query_likely_needs_sources(scrubbed_query)
+        summary_mode = self._is_summary_request(scrubbed_query)
+
         target_words = self._infer_target_words(
             scrubbed_query,
             target_pages=target_pages,
             target_words=target_words,
             longform_flag=longform
         )
+        # Summaries are short queries but usually require broader context.
+        if summary_mode and not target_words and response_mode in ["auto", "standard"]:
+            target_words = 520 if template_structure else 420
+
         longform_mode = self._wants_longform(scrubbed_query, longform) or bool(target_words and target_words >= 1200)
         simple_mode = (
             response_mode == "fast"
-            or (response_mode == "auto" and self._is_simple_query(scrubbed_query) and not template_structure and not longform_mode)
+            or (response_mode == "auto" and self._is_simple_query(scrubbed_query) and not template_structure and not longform_mode and not summary_mode)
         )
         if response_mode == "deep":
             longform_mode = True
 
-        is_smalltalk = self._is_smalltalk(scrubbed_query)
-        needs_sources = self._query_likely_needs_sources(scrubbed_query)
         if is_smalltalk:
             # Avoid noisy retrieval/citation flows for pings like "hej".
             needs_sources = False
+            summary_mode = False
             suggest_images = False
             library_ids = []
             template_structure = ""
@@ -591,6 +634,8 @@ KÄLLUTDRAG:
                     ai_messages = [m for m in history if m['role'] == 'ai']
                     if ai_messages:
                         current_draft = ai_messages[-1]['content']
+                        if self._looks_like_non_draft_ai_message(current_draft):
+                            current_draft = ""
             # If attachments are still processing and no inline text exists, return early
             try:
                 attach_lib_id = None
@@ -625,7 +670,7 @@ KÄLLUTDRAG:
 
         # Increase retrieval depth
         # Standard k=10, increased for long and template-bound generations
-        if simple_mode:
+        if simple_mode and not summary_mode:
             base_k = 4
         elif longform_mode and target_words and target_words >= 2000:
             base_k = 18
@@ -633,6 +678,8 @@ KÄLLUTDRAG:
             base_k = 15
         else:
             base_k = 10
+        if summary_mode:
+            base_k = max(base_k, 14)
 
         # Build library retrieval plan with explicit weighting (0-100 priority)
         library_plan = []
@@ -1247,11 +1294,43 @@ Returnera hela dokumentet i markdown."""
             except Exception:
                 pass
 
-        # Hard safety: if citations are enabled and we still cannot produce any valid citations,
+        # If citations are enabled but none survived normalization, try a quick repair pass to add valid [Sx].
+        if (not chat_only_mode) and show_citations and allowed_id_set and needs_sources:
+            has_any_citation_token = bool(self._citation_id_re.search(scrubbed_answer or ""))
+            if not has_any_citation_token:
+                try:
+                    repair_user = f"""Utkastet nedan saknar källhänvisningar.
+
+Uppgift:
+- Revidera utkastet så att ALLA sakpåståenden stöds av källmaterialet och lägg källhänvisningar efter relevanta påståenden.
+- Använd endast tillåtna käll-ID och formatet [Sx].
+- Om ett påstående inte kan stödjas: ta bort det eller skriv om till en tydlig osäkerhet. Gissa aldrig.
+- Returnera hela dokumentet i markdown. Lägg inga förklaringar före eller efter.
+
+TILLÅTNA KÄLL-ID:
+{", ".join(allowed_id_list)}
+
+UTKAST:
+{scrubbed_answer}
+"""
+                    repair_resp = await self._invoke_with_fallback(
+                        [SystemMessage(content=system_instr), HumanMessage(content=repair_user)],
+                        max_tokens=4096,
+                        primary_model=fallback_model or selected_model,
+                        fallback_model=fallback_model or selected_model,
+                    )
+                    repaired_text = (repair_resp.content or "").strip()
+                    scrubbed_answer, repair_findings = await scrubber_service.scrub_text(repaired_text)
+                    all_findings.extend(repair_findings)
+                    scrubbed_answer = self._normalize_and_filter_citations(scrubbed_answer, allowed_id_set, enable_citations=True)
+                except Exception as e:
+                    print(f"Citation repair failed: {e}")
+
+        # Hard safety: if citations are enabled and we still cannot produce any citations,
         # return a conservative message instead of an untraceable answer.
         if (not chat_only_mode) and show_citations and allowed_id_set and needs_sources:
-            has_citation = bool(re.search(r"(\\[\\s*S\\d+\\s*\\]|\\(\\s*S\\d+\\s*\\))", scrubbed_answer or "", flags=re.IGNORECASE))
-            if not has_citation:
+            has_any_citation_token = bool(self._citation_id_re.search(scrubbed_answer or ""))
+            if not has_any_citation_token:
                 scrubbed_answer = (
                     "Jag kan tyvärr inte skapa ett källbelagt svar utifrån underlaget just nu. "
                     "Prova att omformulera frågan mer specifikt eller ladda upp mer relevant material."
