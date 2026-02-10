@@ -252,6 +252,24 @@
             border-color: #cc0000;
         }
 
+        .delete-btn.confirm-delete {
+            background: #cc0000 !important;
+            color: white !important;
+            border-color: #cc0000 !important;
+            font-weight: 800;
+            animation: pulse-delete 600ms ease infinite alternate;
+        }
+
+        @keyframes pulse-delete {
+            from {
+                opacity: 0.85;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
         /* Main Chat Area */
         .main-content {
             flex: 1;
@@ -259,6 +277,7 @@
             flex-direction: column;
             height: 100vh;
             min-width: 0;
+            overflow: hidden;
         }
 
         .chat-header {
@@ -278,6 +297,7 @@
             display: flex;
             flex-direction: column;
             gap: 2rem;
+            min-height: 0;
         }
 
         .message {
@@ -1230,8 +1250,7 @@
                         ${isLib ? `<span class="action-btn" onclick='event.stopPropagation(); showDocuments("${item.id}")' title="Visa filer">📁</span>` : ''}
                         ${isLib ? `<span class="action-btn" onclick='event.stopPropagation(); selectLibrary(${itemJson})' title="Ladda upp fil">📤</span>` : ''}
                         <span class="action-btn" onclick='event.stopPropagation(); openEditModal("${type}", ${itemJson})' title="Redigera">✎</span>
-                        <span class="action-btn delete-btn" onclick='event.stopPropagation(); deleteResource("${type}", "${item.id}", event)' 
-                              style="${isPending ? 'color: #cc0000;' : ''}"
+                        <span class="action-btn delete-btn${isPending ? ' confirm-delete' : ''}" onclick='event.stopPropagation(); deleteResource("${type}", "${item.id}", event)' 
                               title="Ta bort">${isPending ? 'Säker?' : '×'}</span>
                     </div>
                 </div>
@@ -1431,8 +1450,7 @@
                 return `
                 <div class="item">
                     <span style="flex:1;">${escapeHtml(t.name)}</span>
-                    ${canEdit ? `<span class="action-btn delete-btn" onclick='event.stopPropagation(); deleteResource("template", "${t.id}", event)'
-                          style="${isPending ? 'color: #cc0000;' : ''}"
+                    ${canEdit ? `<span class="action-btn delete-btn${isPending ? ' confirm-delete' : ''}" onclick='event.stopPropagation(); deleteResource("template", "${t.id}", event)'
                           title="Ta bort">${isPending ? 'Säker?' : '×'}</span>` : ""}
                 </div>`;
             }).join('');
