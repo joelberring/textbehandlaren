@@ -1167,6 +1167,22 @@
 
                 fetchConversations();
                 fetchHealth();
+
+                // Restore state from localStorage
+                const savedProjectId = localStorage.getItem('v4_active_project');
+                const savedAssistantId = localStorage.getItem('v4_active_assistant');
+                const savedConversationId = localStorage.getItem('v4_active_conversation');
+
+                if (savedProjectId && !currentProject) {
+                    const p = projects.find(x => x.id === savedProjectId);
+                    if (p) selectProject(p.id);
+                }
+                if (savedConversationId && !currentConversationId) {
+                    loadConversation(savedConversationId);
+                } else if (savedAssistantId && !currentAssistant) {
+                    const a = assistants.find(x => x.id === savedAssistantId);
+                    if (a) selectAssistant(a, true); // Added 'restoring' flag
+                }
             } catch (err) {
                 console.error("Failed to load data:", err);
             }
@@ -1406,6 +1422,7 @@
 
         function clearActiveProject() {
             currentProject = null;
+            localStorage.removeItem('v4_active_project');
             renderProjects(projects);
             if (currentAssistant) {
                 const libCount = (currentAssistant.library_ids || []).length;
@@ -1421,20 +1438,31 @@
             const btn = event ? event.target : null;
 
             if (!pendingDeletes[key]) {
+                // First click: mark as pending and update button in-place (no re-render!)
                 pendingDeletes[key] = true;
-                if (type === 'library') renderList('librariesList', libraries, 'selectLibrary');
-                else if (type === 'template') loadData(); // renderTemplates is called in loadData
-                else renderList('assistantsList', assistants, 'selectAssistant');
+                if (btn) {
+                    btn.textContent = 'Säker?';
+                    btn.classList.add('confirm-delete');
+                }
 
                 setTimeout(() => {
                     if (pendingDeletes[key]) {
                         delete pendingDeletes[key];
-                        if (type === 'library') renderList('librariesList', libraries, 'selectLibrary');
-                        else if (type === 'template') loadData();
-                        else renderList('assistantsList', assistants, 'selectAssistant');
+                        // Reset the button if it still exists in the DOM
+                        if (btn && btn.isConnected) {
+                            btn.textContent = '×';
+                            btn.classList.remove('confirm-delete');
+                        }
                     }
                 }, 3000);
                 return;
+            }
+
+            // Second click: actually delete
+            delete pendingDeletes[key];
+            if (btn) {
+                btn.textContent = '…';
+                btn.style.pointerEvents = 'none';
             }
 
             let endpoint = "";
@@ -1447,11 +1475,15 @@
                 headers: getAuthHeaders()
             });
             if (res.ok) {
-                delete pendingDeletes[key];
                 loadData();
             } else {
                 const err = await res.json();
                 alert("Fel vid borttagning: " + (err.detail || "Okänt fel"));
+                if (btn && btn.isConnected) {
+                    btn.textContent = '×';
+                    btn.classList.remove('confirm-delete');
+                    btn.style.pointerEvents = '';
+                }
             }
         }
 
@@ -1568,6 +1600,7 @@
             const res = await fetch(`/api/projects/${projectId}`, { headers: getAuthHeaders() });
             const proj = await res.json();
             currentProject = proj;
+            localStorage.setItem('v4_active_project', projectId);
             renderProjects(projects);
             const memberCount = Array.isArray(currentProject?.members) ? currentProject.members.length : 0;
             const projectLabel = currentProject ? `Projekt: ${currentProject.name} (${memberCount} medlemmar)` : "Inget projekt";
@@ -1692,19 +1725,23 @@
             await loadProjectMembers();
         }
 
-        function selectAssistant(asst) {
+        function selectAssistant(asst, restoring = false) {
             currentAssistant = asst;
-            currentConversationId = Math.random().toString(36).substring(7); // New conv for session
-            messageSourceMap = {};
-            clearSourceInspector();
+            localStorage.setItem('v4_active_assistant', asst.id);
+            if (!restoring) {
+                currentConversationId = Math.random().toString(36).substring(7); // New conv for session
+                localStorage.removeItem('v4_active_conversation');
+                messageSourceMap = {};
+                clearSourceInspector();
+                document.getElementById('chatContainer').innerHTML = ''; // Clear previous
+                addMessage(`Assistent ${asst.name} redo.`, 'ai');
+            }
             document.getElementById('activeHeader').innerText = `Aktiv: ${asst.name}`;
             const libCount = (asst.library_ids || []).length;
             const projectLabel = currentProject ? `Projekt: ${currentProject.name}` : `${libCount} bibliotek kopplade`;
             document.getElementById('linkedLibs').innerText = projectLabel;
             document.getElementById('chatInputArea').style.display = 'flex';
             document.getElementById('learnBtn').style.display = 'block';
-            document.getElementById('chatContainer').innerHTML = ''; // Clear previous
-            addMessage(`Assistent ${asst.name} redo.`, 'ai');
             fetchLearnedPrefs();
         }
 
@@ -1791,6 +1828,7 @@
                 });
 
                 container.scrollTop = container.scrollHeight;
+                localStorage.setItem('v4_active_conversation', id);
                 fetchConversations();
             } catch (err) {
                 console.error("Failed to load conversation:", err);
@@ -1802,20 +1840,36 @@
             const btn = event ? event.target : null;
 
             if (!pendingDeletes[key]) {
+                // First click: mark as pending, update button in-place
                 pendingDeletes[key] = true;
-                fetchConversations();
+                if (btn) {
+                    btn.textContent = 'Säker?';
+                    btn.style.color = '#cc0000';
+                }
 
                 setTimeout(() => {
                     if (pendingDeletes[key]) {
                         delete pendingDeletes[key];
-                        fetchConversations();
+                        if (btn && btn.isConnected) {
+                            btn.textContent = '×';
+                            btn.style.color = '';
+                        }
                     }
                 }, 3000);
                 return;
             }
 
-            await fetch(`/api/chat/conversations/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+            // Second click: actually delete
             delete pendingDeletes[key];
+            if (btn) {
+                btn.textContent = '…';
+                btn.style.pointerEvents = 'none';
+            }
+            await fetch(`/api/chat/conversations/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+            if (currentConversationId === id) {
+                currentConversationId = null;
+                localStorage.removeItem('v4_active_conversation');
+            }
             fetchConversations();
         }
 

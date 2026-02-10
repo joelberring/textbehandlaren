@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     FIREBASE_APP_ID: str = ""
     FIREBASE_MEASUREMENT_ID: str = ""
     ALLOW_LOCAL_FALLBACK: bool = False
-    HEALTH_CHECK_EMBEDDINGS: bool = False
+    HEALTH_CHECK_EMBEDDINGS: bool = True
     DIRECT_ATTACHMENT_MAX_CHARS: int = 8000
     DIRECT_ATTACHMENT_MAX_PAGES: int = 20
     DEFAULT_PERSONA_PROMPT: str = """Du är en intelligent dokumentassistent som heter Antigravity. 

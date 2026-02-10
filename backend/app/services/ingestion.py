@@ -384,6 +384,10 @@ class IngestionService:
             embeddings = get_embeddings()
             query_vector = embeddings.embed_query(query)
         
+        print(f"DEBUG: Vector search query: '{query[:50]}...'")
+        print(f"DEBUG: Vector dimension: {len(query_vector)}")
+        print(f"DEBUG: Searching libraries: {library_ids}")
+        
         found_docs = []
         
         # Firestore currently doesn't support vector search across multiple collections easily in one call.

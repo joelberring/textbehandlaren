@@ -1078,7 +1078,7 @@ Returnera hela dokumentet i markdown."""
         # Second-pass verification to aggressively remove hallucinations.
         # We skip only in explicit fast mode; auto/standard/deep are verified.
         # For very long answers we do per-section verification instead (global verification won't fit context).
-        if response_mode != "fast" and not used_section_verification:
+        if response_mode != "fast" and not used_section_verification and settings.ENVIRONMENT != "production":
             try:
                 verify_primary = selected_model
                 # Use the cheaper model for verification unless user explicitly asked for deep/longform/template work.
