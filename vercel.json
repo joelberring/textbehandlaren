@@ -15,7 +15,7 @@
         },
         {
             "src": "/static/(.*)",
-            "dest": "backend/app/static/$1"
+            "dest": "backend/app/main.py"
         },
         {
             "src": "/(.*)",
