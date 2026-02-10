@@ -88,6 +88,27 @@ async function logout() {
     }
 }
 
+// Reset password
+async function resetPassword(email) {
+    if (!email) {
+        email = prompt('Ange din e-postadress:');
+    }
+    if (!email) return;
+    try {
+        await auth.sendPasswordResetEmail(email);
+        alert('Ett återställningsmejl har skickats till ' + email + '. Kolla din inkorg (och skräppost).');
+    } catch (error) {
+        console.error('Password reset error:', error);
+        if (error.code === 'auth/user-not-found') {
+            alert('Ingen användare hittades med den e-postadressen.');
+        } else if (error.code === 'auth/invalid-email') {
+            alert('Ogiltig e-postadress.');
+        } else {
+            alert('Kunde inte skicka återställningsmejl: ' + error.message);
+        }
+    }
+}
+
 // Get auth header for API requests
 function getAuthHeaders(contentType = 'application/json') {
     const headers = {};

@@ -12,7 +12,9 @@
     <script src="/static/firebase-auth.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..900&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..900&family=Space+Grotesk:wght@300..700&display=swap"
+        rel="stylesheet">
 
     <style>
         :root {
@@ -586,6 +588,7 @@
                 opacity: 0;
                 transform: translateY(8px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -599,21 +602,25 @@
                 height: auto;
                 overflow: auto;
             }
+
             .sidebar {
                 width: 100%;
                 max-height: 46vh;
                 border-right: none;
                 border-bottom: 1px solid var(--border);
             }
+
             .main-content {
                 height: auto;
                 min-height: 54vh;
             }
+
             .right-panel {
                 height: auto;
                 border-left: none;
                 border-top: 1px solid var(--border);
             }
+
             .chat-container {
                 padding: 1.2rem;
             }
@@ -683,7 +690,8 @@
         <div class="box requires-auth">
             <label>Word-mallar</label>
             <div id="templatesList" class="list-container">Laddar...</div>
-            <button class="requires-admin" onclick="document.getElementById('templateInput').click()">Ladda upp mall</button>
+            <button class="requires-admin" onclick="document.getElementById('templateInput').click()">Ladda upp
+                mall</button>
             <input type="file" id="templateInput" hidden accept=".docx">
         </div>
 
@@ -2843,6 +2851,10 @@
             <input type="password" id="login-password" placeholder="Lösenord" required>
             <button type="submit">Logga in</button>
         </form>
+
+        <a href="#"
+            onclick="event.preventDefault(); resetPassword(document.getElementById('login-email').value || null)"
+            style="text-align: center; font-size: 0.85rem; color: #555; cursor: pointer;">Glömt lösenord?</a>
 
         <div style="text-align: center; font-size: 0.8rem; margin: 0.5rem 0;">eller</div>
 
