@@ -51,14 +51,53 @@
             color: var(--text);
             height: 100vh;
             display: grid;
-            grid-template-columns: 380px 1fr minmax(420px, 560px);
+            grid-template-columns: 380px 6px 1fr 6px minmax(420px, 560px);
             line-height: 1.5;
             overflow: hidden;
         }
 
+        /* Draggable panel dividers */
+        .panel-divider {
+            width: 6px;
+            cursor: col-resize;
+            background: transparent;
+            position: relative;
+            z-index: 20;
+            transition: background 150ms ease;
+        }
+
+        .panel-divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 3px;
+            height: 36px;
+            border-radius: 3px;
+            background: var(--border-strong);
+            opacity: 0;
+            transition: opacity 150ms ease;
+        }
+
+        .panel-divider:hover {
+            background: rgba(245, 158, 11, 0.12);
+        }
+
+        .panel-divider:hover::after {
+            opacity: 1;
+        }
+
+        .panel-divider.dragging {
+            background: rgba(245, 158, 11, 0.22);
+        }
+
+        .panel-divider.dragging::after {
+            opacity: 1;
+        }
+
         /* Sidebar / Boxes */
         .sidebar {
-            width: 380px;
             border-right: 1px solid var(--border);
             padding: 1.25rem;
             display: flex;
@@ -383,7 +422,7 @@
         .right-panel {
             border-left: 1px solid var(--border);
             padding: 1.25rem 1.1rem;
-            overflow: hidden;
+            overflow-y: auto;
             background: rgba(255, 255, 255, 0.55);
             backdrop-filter: blur(10px);
             height: 100vh;
@@ -722,6 +761,8 @@
         <button id="exportBtn" class="requires-auth" disabled>Exportera aktuell text</button>
     </div>
 
+    <div class="panel-divider" id="dividerLeft"></div>
+
     <div class="main-content requires-auth">
         <div class="chat-header">
             <div id="activeHeader">Välj en assistent för att börja</div>
@@ -784,6 +825,8 @@
             </div>
         </div>
     </div>
+
+    <div class="panel-divider" id="dividerRight"></div>
 
     <div id="rightPanel" class="right-panel requires-auth">
         <div class="box" style="flex:1; min-height:0;">
@@ -2872,6 +2915,95 @@
         <button onclick="hideLoginModal()"
             style="background:none; color:var(--muted); margin-top: 1rem; border: none;">Avbryt</button>
     </div>
+
+    <script>
+        // Panel resize via drag
+        (function () {
+            const dividerLeft = document.getElementById('dividerLeft');
+            const dividerRight = document.getElementById('dividerRight');
+            if (!dividerLeft || !dividerRight) return;
+
+            let activeDivider = null;
+            let startX = 0;
+            let startLeftWidth = 0;
+            let startCenterWidth = 0;
+            let startRightWidth = 0;
+
+            function getColumnWidths() {
+                const cols = getComputedStyle(document.body).gridTemplateColumns.split(/\s+/);
+                // cols = [sidebar, 6px, center, 6px, right]
+                return {
+                    left: parseFloat(cols[0]),
+                    center: parseFloat(cols[2]),
+                    right: parseFloat(cols[4])
+                };
+            }
+
+            function setColumnWidths(left, center, right) {
+                document.body.style.gridTemplateColumns = `${left}px 6px ${center}px 6px ${right}px`;
+                try { localStorage.setItem('panelWidths', JSON.stringify({ left, center, right })); } catch (e) { }
+            }
+
+            function onMouseDown(e, divider) {
+                e.preventDefault();
+                activeDivider = divider;
+                startX = e.clientX;
+                const w = getColumnWidths();
+                startLeftWidth = w.left;
+                startCenterWidth = w.center;
+                startRightWidth = w.right;
+                divider.classList.add('dragging');
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+            }
+
+            dividerLeft.addEventListener('mousedown', (e) => onMouseDown(e, dividerLeft));
+            dividerRight.addEventListener('mousedown', (e) => onMouseDown(e, dividerRight));
+
+            document.addEventListener('mousemove', (e) => {
+                if (!activeDivider) return;
+                const dx = e.clientX - startX;
+
+                if (activeDivider === dividerLeft) {
+                    let newLeft = Math.max(240, Math.min(600, startLeftWidth + dx));
+                    let newCenter = startCenterWidth - (newLeft - startLeftWidth);
+                    if (newCenter < 300) {
+                        newCenter = 300;
+                        newLeft = startLeftWidth + startCenterWidth - 300;
+                    }
+                    setColumnWidths(newLeft, newCenter, startRightWidth);
+                } else if (activeDivider === dividerRight) {
+                    let newRight = Math.max(280, Math.min(700, startRightWidth - dx));
+                    let newCenter = startCenterWidth + (startRightWidth - newRight);
+                    if (newCenter < 300) {
+                        newCenter = 300;
+                        newRight = startRightWidth + startCenterWidth - 300;
+                    }
+                    setColumnWidths(startLeftWidth, newCenter, newRight);
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (activeDivider) {
+                    activeDivider.classList.remove('dragging');
+                    activeDivider = null;
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                }
+            });
+
+            // Restore saved widths
+            try {
+                const saved = JSON.parse(localStorage.getItem('panelWidths'));
+                if (saved && saved.left && saved.center && saved.right) {
+                    const total = saved.left + saved.center + saved.right + 12; // 2x 6px dividers
+                    if (Math.abs(total - window.innerWidth) < 100) {
+                        setColumnWidths(saved.left, saved.center, saved.right);
+                    }
+                }
+            } catch (e) { }
+        })();
+    </script>
 
 </body>
 
