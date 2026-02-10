@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 import shutil
 import os
 import uuid
@@ -125,7 +125,6 @@ def _extract_inline_text_if_small(file_path: str) -> str:
 @router.post("/library/{library_id}/upload")
 async def upload_document(
     library_id: str, 
-    background_tasks: BackgroundTasks,
     interpret_images: bool = False,
     gdpr_name_scrub: Optional[bool] = None,
     file: UploadFile = File(...),
@@ -158,9 +157,8 @@ async def upload_document(
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Start ingestion in the background
-        background_tasks.add_task(
-            ingestion_service.process_document,
+        # Process document synchronously (required for Vercel serverless)
+        result = await ingestion_service.process_document(
             file_path, 
             safe_name, 
             library_id,
@@ -170,10 +168,11 @@ async def upload_document(
         )
         
         return {
-            "status": "accepted",
-            "message": f"Filen {safe_name} har tagits emot och bearbetas nu i bakgrunden.",
+            "status": "completed",
+            "message": f"Filen {safe_name} har bearbetats.",
             "filename": safe_name,
-            "gdpr_name_scrub": effective_gdpr_name_scrub
+            "gdpr_name_scrub": effective_gdpr_name_scrub,
+            "text_chunks": result.get("text_chunks", 0) if result else 0
         }
     except Exception as e:
         print(f"Error saving uploaded document: {e}")
@@ -187,7 +186,6 @@ async def upload_document(
 @router.post("/conversation/{conversation_id}/upload")
 async def upload_document_to_conversation(
     conversation_id: str,
-    background_tasks: BackgroundTasks,
     interpret_images: bool = False,
     gdpr_name_scrub: Optional[bool] = None,
     file: UploadFile = File(...),
@@ -241,8 +239,8 @@ async def upload_document_to_conversation(
             }
             conv_ref.set(payload, merge=True)
 
-        background_tasks.add_task(
-            ingestion_service.process_document,
+        # Process document synchronously (required for Vercel serverless)
+        result = await ingestion_service.process_document(
             file_path,
             safe_name,
             library_id,
@@ -253,10 +251,11 @@ async def upload_document_to_conversation(
         )
 
         return {
-            "status": "accepted",
-            "message": f"Filen {safe_name} har bifogats till konversationen och bearbetas nu.",
+            "status": "completed",
+            "message": f"Filen {safe_name} har bifogats till konversationen och bearbetats.",
             "filename": safe_name,
-            "gdpr_name_scrub": effective_gdpr_name_scrub
+            "gdpr_name_scrub": effective_gdpr_name_scrub,
+            "text_chunks": result.get("text_chunks", 0) if result else 0
         }
     except Exception as e:
         print(f"Error saving uploaded document: {e}")

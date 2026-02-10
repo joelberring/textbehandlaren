@@ -1,10 +1,16 @@
 {
+    "functions": {
+        "backend/app/main.py": {
+            "maxDuration": 60
+        }
+    },
     "builds": [
         {
             "src": "backend/app/main.py",
             "use": "@vercel/python",
             "config": {
-                "runtime": "python3.12"
+                "runtime": "python3.12",
+                "maxLambdaSize": "50mb"
             }
         }
     ],

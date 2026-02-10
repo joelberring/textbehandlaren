@@ -1937,8 +1937,8 @@
             if (successCount > 0) {
                 hideModal('uploadModal');
                 const msg = attachmentMode
-                    ? `${successCount} fil(er) har bifogats till konversationen och bearbetas nu i bakgrunden.${gdprNameScrub ? " GDPR-namntvätt är aktiverad." : ""}`
-                    : `${successCount} fil(er) har tagits emot och bearbetas nu i bakgrunden.${gdprNameScrub ? " GDPR-namntvätt är aktiverad." : ""} Du kan fortsätta använda assistenten under tiden.`;
+                    ? `${successCount} fil(er) har bifogats till konversationen och bearbetats.${gdprNameScrub ? " GDPR-namntvätt är aktiverad." : ""}`
+                    : `${successCount} fil(er) har bearbetats och indexerats.${gdprNameScrub ? " GDPR-namntvätt är aktiverad." : ""}`;
                 addMessage(msg, 'ai');
             }
 
