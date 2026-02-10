@@ -417,9 +417,13 @@ class IngestionService:
                 if "index" in str(e).lower():
                     print(f"INDEX MISSING for library {lib_id}. Create a vector index on 'embedding' field in the 'knowledge_base' subcollection.")
         
-        # Fallback 1: if vector search failed, read chunks directly from Firestore
-        if len(found_docs) == 0 and vector_search_failed:
-            print(f"FALLBACK: Vector search failed, reading chunks directly from Firestore...")
+        # Fallback 1: If vector search yields no results, read chunks directly from Firestore.
+        # This helps when:
+        # - the vector index is missing (find_nearest throws), or
+        # - the index exists but is still catching up after fresh ingestion (find_nearest returns 0).
+        if len(found_docs) == 0:
+            reason = "after vector-search failure" if vector_search_failed else "after zero vector results"
+            print(f"FALLBACK: No vector results ({reason}); reading chunks directly from Firestore...")
             for lib_id in library_ids:
                 try:
                     collection_ref = db.collection("libraries").document(lib_id).collection("knowledge_base")

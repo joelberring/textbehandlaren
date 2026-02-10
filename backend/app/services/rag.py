@@ -487,10 +487,12 @@ KÄLLUTDRAG:
         # Fallback: if no libraries linked at all, use all of the user's own libraries
         if not library_ids and user_id:
             try:
-                user_libs = db.collection("libraries").where("user_id", "==", user_id).stream()
-                library_ids = [lib.id for lib in user_libs]
+                # Libraries store ownership under "owner_id" (not "user_id").
+                owned_libs = db.collection("libraries").where("owner_id", "==", user_id).stream()
+                shared_libs = db.collection("libraries").where("shared_with", "array_contains", user_id).stream()
+                library_ids = list({lib.id for lib in owned_libs} | {lib.id for lib in shared_libs})
                 if library_ids:
-                    print(f"RAG fallback: using {len(library_ids)} user-owned libraries (no libraries linked to assistant)")
+                    print(f"RAG fallback: using {len(library_ids)} user-accessible libraries (no libraries linked to assistant)")
             except Exception as e:
                 print(f"RAG fallback: failed to load user libraries: {e}")
 
@@ -556,7 +558,12 @@ KÄLLUTDRAG:
                             "sources": [],
                             "matched_images": [],
                             "scrubbed_query": scrubbed_query,
-                            "pii_findings": all_findings
+                            "pii_findings": all_findings,
+                            "debug": {
+                                "status": "attachments_processing",
+                                "pending_documents": len(pending),
+                                "attachment_library_id": attach_lib_id,
+                            },
                         }
             except Exception as e:
                 print(f"Attachment status check failed: {e}")
@@ -746,14 +753,56 @@ KÄLLUTDRAG:
         else:
             citation_instr = "Använd INTE källhänvisningar i texten."
 
+        chat_only_mode = False
         if len(all_sources) == 0:
-            return {
-                "answer": "Jag hittar inga källor i dina bibliotek eller bifogade filer. Kontrollera att filerna är färdigbearbetade och försök igen.",
-                "sources": [],
-                "matched_images": [],
-                "scrubbed_query": scrubbed_query,
-                "pii_findings": all_findings
-            }
+            # Some queries are unsafe to answer without sources (e.g. "sammanfatta bifogad fil").
+            # We keep a conservative heuristic to avoid hallucinated summaries when retrieval fails.
+            def _query_likely_needs_sources(q: str) -> bool:
+                ql = (q or "").lower()
+                triggers = [
+                    "bifog",
+                    "sammanfatt",
+                    "käll", "underlag", "källmaterial",
+                    "i dokumentet", "i filen", "i rapporten",
+                    "enligt dokumentet", "enligt underlaget", "enligt käll",
+                    "citat", "sida", "kapitel", "avsnitt", "tabell", "figur",
+                ]
+                return any(t in ql for t in triggers)
+
+            must_have_sources = bool(show_citations) or _query_likely_needs_sources(scrubbed_query)
+            if must_have_sources:
+                return {
+                    "answer": "Jag hittar inga källor i dina bibliotek eller bifogade filer. Kontrollera att filerna är färdigbearbetade och försök igen.",
+                    "sources": [],
+                    "matched_images": [],
+                    "scrubbed_query": scrubbed_query,
+                    "pii_findings": all_findings,
+                    # Include retrieval debug even when no sources were found so the UI can display
+                    # which libraries were considered and why generation stopped before calling the LLM.
+                    "debug": {
+                        "source_count": 0,
+                        "k": base_k,
+                        "max_total_sources": max_total_sources,
+                        "max_chunk_chars": max_chunk_chars,
+                        "context_length": len(context_text),
+                        "target_words": target_words,
+                        "longform_mode": longform_mode,
+                        "suggest_images": suggest_images,
+                        "response_mode": response_mode,
+                        "simple_mode": simple_mode,
+                        "inline_texts_count": len(inline_texts) if isinstance(inline_texts, list) else 0,
+                        "library_ids": library_ids,
+                        "library_plan": library_plan,
+                        "model": {
+                            "primary": selected_model,
+                            "fallback": fallback_model,
+                            **model_meta,
+                        },
+                    },
+                }
+
+            # Citations disabled + no source-dependent intent => allow "plain chat" without sources
+            chat_only_mode = True
         
         # V9: Image Retrieval
         matched_images = []
@@ -778,52 +827,78 @@ KÄLLUTDRAG:
             target_words = 220
         length_instruction = self._length_instruction(target_words)
         
-        system_instr = f"""DIN IDENTITET OCH KÄRNINSTRUKTION:
-{persona}
-
-GROUNDING OCH SANNING (KRITISKT):
-- Du får endast använda information som finns i de tillhandahållna REFERENSMATERIALEN nedan.
-- Om du inte hittar svaret i källorna, säg: "Jag hittar tyvärr ingen information om detta i källmaterialet."
-- HITTA ALDRIG PÅ FAKTA, SIFFROR, NAMN ELLER DATUM.
-- Tidigare AI-utkast och dialoghistorik är arbetsmaterial, inte källor. Vid konflikt: följ referensmaterialet.
-- Skapa ALDRIG källhänvisningar med käll-ID som inte finns i listan över tillåtna källor.
-- Om en källa är otydlig, redovisa osäkerheten istället för att gissa.
-
-STIL OCH FORMATERING:
-{learned_prefs}
-{citation_instr}
-
-TILLÅTNA KÄLL-ID (använd endast dessa i [Sx]):
-{", ".join(allowed_id_list)}
-IMPORTANT: Om du redigerar ett befintligt utkast, behåll dess grundläggande struktur.
-IMPORTANT: Om malltexten innehåller instruktioner eller fasta formuleringar, upprepa dem inte. Fyll endast i saklig text där det behövs.
-ANVÄND MARKDOWN (# för rubriker, - för listor) för att strukturera ditt svar så att det kan formateras korrekt vid export.
-{f"OM RELEVANTA BILDER FINNS: föreslå diskret placering i texten med rader i formatet [BILDFÖRSLAG: vad som ska visas | källa | sida | sektion]. Använd max 3 bildförslag och placera dem under relevanta rubriker." if suggest_images else "BILDFÖRSLAG ÄR AVSTÄNGT FÖR DETTA SVAR."}
-
-SVARSARKITEKTUR (NotebookLM-liknande tydlighet):
-- Tänk igenom svaret först och skriv sedan ett sammanhållet, genomarbetat svar.
-- Inled med en tydlig H1-rubrik och en kort sammanfattning (2-5 meningar).
-- Följ upp med flera H2/H3-rubriker i logisk ordning.
-- Använd punktlistor där det förbättrar läsbarheten.
-- Om svaret är långt: behåll röd tråd, undvik upprepningar och avsluta med tydligt ställningstagande/fortsatt arbete.
-- Skriv aldrig ut hjälpord från mallar som "Rubrik:", "Underrubrik:", "Text" eller "Kursiv text".
-{ "SNABBLÄGE: Ge ett kort, direkt och korrekt svar. Undvik onödig utfyllnad. Max cirka 220 ord om inte användaren ber om mer." if simple_mode else "" }
-
-LÄNGDMÅL:
-{length_instruction}
-
-BIBLIOTEKSHIERARKI:
-{library_priority_policy}
-Vid motstridiga uppgifter: prioritera källor med högre biblioteksvärde, om inte användarens bifogade [INPUT]/[ATTACHMENT_INLINE] tydligt ska väga tyngre i frågan.
-
-REFERENSMATERIAL (Använd detta för att hämta fakta):
-{context_text}
-{image_context}
-{template_structure}
-{project_context}
-
-VIKTIGT: Om materialet ovan innehåller texter märkta som [INPUT] eller [ATTACHMENT_INLINE], betrakta dem som primära källor (användarens egna bifogade filer).
-"""
+        if chat_only_mode:
+            system_instr = f"""DIN IDENTITET OCH KÄRNINSTRUKTION:
+	{persona}
+	
+	KONTEXT (INGA KÄLLOR):
+	- Inga källor eller bifogade filer är tillgängliga för detta svar.
+	- Svara som en vanlig AI-assistent baserat på din allmänna kunskap och dialogen.
+	- Var tydlig med osäkerhet och undvik att hitta på exakta siffror/datum om du inte är säker.
+	
+	STIL OCH FORMATERING:
+	{learned_prefs}
+	Använd INTE källhänvisningar i texten.
+	ANVÄND MARKDOWN (# för rubriker, - för listor) för att strukturera ditt svar.
+	
+	SVARSARKITEKTUR:
+	- Svara direkt och tydligt.
+	- Använd rubriker och listor när det förbättrar läsbarheten.
+	{ "SNABBLÄGE: Ge ett kort, direkt och korrekt svar. Undvik onödig utfyllnad. Max cirka 220 ord om inte användaren ber om mer." if simple_mode else "" }
+	
+	LÄNGDMÅL:
+	{length_instruction}
+	
+	{template_structure}
+	{project_context}
+	"""
+        else:
+            system_instr = f"""DIN IDENTITET OCH KÄRNINSTRUKTION:
+	{persona}
+	
+	GROUNDING OCH SANNING (KRITISKT):
+	- Du får endast använda information som finns i de tillhandahållna REFERENSMATERIALEN nedan.
+	- Om du inte hittar svaret i källorna, säg: "Jag hittar tyvärr ingen information om detta i källmaterialet."
+	- HITTA ALDRIG PÅ FAKTA, SIFFROR, NAMN ELLER DATUM.
+	- Tidigare AI-utkast och dialoghistorik är arbetsmaterial, inte källor. Vid konflikt: följ referensmaterialet.
+	- Skapa ALDRIG källhänvisningar med käll-ID som inte finns i listan över tillåtna källor.
+	- Om en källa är otydlig, redovisa osäkerheten istället för att gissa.
+	
+	STIL OCH FORMATERING:
+	{learned_prefs}
+	{citation_instr}
+	
+	TILLÅTNA KÄLL-ID (använd endast dessa i [Sx]):
+	{", ".join(allowed_id_list)}
+	IMPORTANT: Om du redigerar ett befintligt utkast, behåll dess grundläggande struktur.
+	IMPORTANT: Om malltexten innehåller instruktioner eller fasta formuleringar, upprepa dem inte. Fyll endast i saklig text där det behövs.
+	ANVÄND MARKDOWN (# för rubriker, - för listor) för att strukturera ditt svar så att det kan formateras korrekt vid export.
+	{f"OM RELEVANTA BILDER FINNS: föreslå diskret placering i texten med rader i formatet [BILDFÖRSLAG: vad som ska visas | källa | sida | sektion]. Använd max 3 bildförslag och placera dem under relevanta rubriker." if suggest_images else "BILDFÖRSLAG ÄR AVSTÄNGT FÖR DETTA SVAR."}
+	
+	SVARSARKITEKTUR (NotebookLM-liknande tydlighet):
+	- Tänk igenom svaret först och skriv sedan ett sammanhållet, genomarbetat svar.
+	- Inled med en tydlig H1-rubrik och en kort sammanfattning (2-5 meningar).
+	- Följ upp med flera H2/H3-rubriker i logisk ordning.
+	- Använd punktlistor där det förbättrar läsbarheten.
+	- Om svaret är långt: behåll röd tråd, undvik upprepningar och avsluta med tydligt ställningstagande/fortsatt arbete.
+	- Skriv aldrig ut hjälpord från mallar som "Rubrik:", "Underrubrik:", "Text" eller "Kursiv text".
+	{ "SNABBLÄGE: Ge ett kort, direkt och korrekt svar. Undvik onödig utfyllnad. Max cirka 220 ord om inte användaren ber om mer." if simple_mode else "" }
+	
+	LÄNGDMÅL:
+	{length_instruction}
+	
+	BIBLIOTEKSHIERARKI:
+	{library_priority_policy}
+	Vid motstridiga uppgifter: prioritera källor med högre biblioteksvärde, om inte användarens bifogade [INPUT]/[ATTACHMENT_INLINE] tydligt ska väga tyngre i frågan.
+	
+	REFERENSMATERIAL (Använd detta för att hämta fakta):
+	{context_text}
+	{image_context}
+	{template_structure}
+	{project_context}
+	
+	VIKTIGT: Om materialet ovan innehåller texter märkta som [INPUT] eller [ATTACHMENT_INLINE], betrakta dem som primära källor (användarens egna bifogade filer).
+	"""
 
         # Decide if we should do a two-step outline -> full text flow
         use_outline = (
@@ -846,7 +921,7 @@ VIKTIGT: Om materialet ovan innehåller texter märkta som [INPUT] eller [ATTACH
             model_meta["selected_model_source"] = "fast_mode"
 
         user_input = f"""Här är det aktuella utkastet eller kontexten:
-{current_draft if current_draft else "Inget utkast än. Skapa ett nytt dokument baserat på källmaterialet."}
+	{current_draft if current_draft else ("Inget utkast än. Skapa ett nytt dokument baserat på instruktionen och dialogen." if chat_only_mode else "Inget utkast än. Skapa ett nytt dokument baserat på källmaterialet.")}
 
 Dialoghistorik:
 {history_text}
@@ -1075,7 +1150,7 @@ Returnera hela dokumentet i markdown."""
 
         if progress_cb:
             try:
-                await progress_cb("verify", 82, "Kvalitetssäkrar mot källor...")
+                await progress_cb("verify", 82, "Kvalitetssäkrar mot källor..." if not chat_only_mode else "Kvalitetssäkrar...")
             except Exception:
                 pass
         
@@ -1088,7 +1163,7 @@ Returnera hela dokumentet i markdown."""
         # Second-pass verification to aggressively remove hallucinations.
         # We skip only in explicit fast mode; auto/standard/deep are verified.
         # For very long answers we do per-section verification instead (global verification won't fit context).
-        if response_mode != "fast" and not used_section_verification and settings.ENVIRONMENT != "production":
+        if (not chat_only_mode) and response_mode != "fast" and not used_section_verification and settings.ENVIRONMENT != "production":
             try:
                 verify_primary = selected_model
                 # Use the cheaper model for verification unless user explicitly asked for deep/longform/template work.
@@ -1188,6 +1263,7 @@ Returnera hela dokumentet i markdown."""
             "pii_findings": all_findings,
             "debug": {
                 "source_count": len(all_sources),
+                "chat_only_mode": chat_only_mode,
                 "k": base_k,
                 "max_total_sources": max_total_sources,
                 "max_chunk_chars": max_chunk_chars,

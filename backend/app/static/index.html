@@ -1550,33 +1550,55 @@
             }
         }
 
-        async function createAssistant() {
-            const name = document.getElementById('asstName').value;
-            if (!name) return alert("Ange ett namn");
+	        async function createAssistant() {
+	            const name = document.getElementById('asstName').value;
+	            if (!name) return alert("Ange ett namn");
 
-            const prompt = document.getElementById('asstPrompt').value;
-            const library_ids = Array.from(document.getElementById('asstLibs').selectedOptions).map(o => o.value);
-            const library_priority_profile = collectAssistantPriorityProfile(library_ids);
-            const template_id = document.getElementById('asstTemplate').value;
-            const model_preference = document.getElementById('asstModel').value || null;
+	            const prompt = document.getElementById('asstPrompt').value;
+	            const asstLibsEl = document.getElementById('asstLibs');
+	            // Use a robust selection reader (Safari/iOS can be finicky with selectedOptions on multi-selects).
+	            const library_ids = Array.from(asstLibsEl?.options || []).filter(o => o && o.selected).map(o => o.value);
+	            const library_priority_profile = collectAssistantPriorityProfile(library_ids);
+	            const template_id = document.getElementById('asstTemplate').value;
+	            const model_preference = document.getElementById('asstModel').value || null;
 
-            const method = editingResourceId ? 'PUT' : 'POST';
-            const endpoint = editingResourceId ? `/api/assistants/${editingResourceId}` : '/api/assistants';
+	            const isUpdate = !!editingResourceId;
+	            const method = editingResourceId ? 'PUT' : 'POST';
+	            const endpoint = editingResourceId ? `/api/assistants/${editingResourceId}` : '/api/assistants';
 
-            const res = await fetch(endpoint, {
-                method: method,
-                headers: getAuthHeaders(),
-                body: JSON.stringify({ name, system_prompt: prompt, library_ids, library_priority_profile, template_id, model_preference })
-            });
+	            const res = await fetch(endpoint, {
+	                method: method,
+	                headers: getAuthHeaders(),
+	                body: JSON.stringify({ name, system_prompt: prompt, library_ids, library_priority_profile, template_id, model_preference })
+	            });
 
-            if (res.ok) {
-                hideModal('assistantModal');
-                setTimeout(loadData, 500);
-            } else {
-                const err = await res.json();
-                alert("Fel vid skapande: " + (err.detail || "Okänt fel"));
-            }
-        }
+	            if (res.ok) {
+	                const saved = await res.json();
+	                hideModal('assistantModal');
+	                // Refresh lists and update the active assistant UI immediately to avoid confusion
+	                // (otherwise the header can still show "0 bibliotek kopplade" until the user re-selects).
+	                setTimeout(async () => {
+	                    await loadData();
+	                    if (saved && saved.id) {
+	                        if (isUpdate) {
+	                            if (currentAssistant && currentAssistant.id === saved.id) {
+	                                currentAssistant = saved;
+	                                document.getElementById('activeHeader').innerText = `Aktiv: ${saved.name}`;
+	                                const libCount = (saved.library_ids || []).length;
+	                                const projectLabel = currentProject ? `Projekt: ${currentProject.name}` : `${libCount} bibliotek kopplade`;
+	                                document.getElementById('linkedLibs').innerText = projectLabel;
+	                            }
+	                        } else {
+	                            // New assistant: auto-select it so the user immediately sees the linked libraries.
+	                            selectAssistant(saved);
+	                        }
+	                    }
+	                }, 500);
+	            } else {
+	                const err = await res.json();
+	                alert("Fel vid skapande: " + (err.detail || "Okänt fel"));
+	            }
+	        }
 
         async function createProject() {
             const name = document.getElementById('projectName').value;
