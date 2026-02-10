@@ -133,9 +133,8 @@ function updateUIForLoggedInUser(user) {
         `;
     }
     // Enable app functionality
-    document.querySelectorAll('.requires-auth').forEach(el => {
-        el.style.display = 'block';
-    });
+    document.body.classList.add('authenticated');
+
     // Role-specific sections are unlocked after backend profile is loaded.
     document.querySelectorAll('.requires-superadmin').forEach(el => {
         el.style.display = 'none';
@@ -150,9 +149,8 @@ function updateUIForLoggedOutUser() {
         `;
     }
     // Disable app functionality
-    document.querySelectorAll('.requires-auth').forEach(el => {
-        el.style.display = 'none';
-    });
+    document.body.classList.remove('authenticated');
+
     document.querySelectorAll('.requires-superadmin').forEach(el => {
         el.style.display = 'none';
     });

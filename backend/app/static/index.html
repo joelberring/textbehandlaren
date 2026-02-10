@@ -42,6 +42,20 @@
             padding: 0;
         }
 
+        /* Auth visibility: toggled by body class .authenticated in firebase-auth.js */
+        .requires-auth {
+            display: none !important;
+        }
+
+        body.authenticated .requires-auth {
+            display: block !important;
+        }
+
+        body.authenticated .main-content.requires-auth,
+        body.authenticated .right-panel.requires-auth {
+            display: flex !important;
+        }
+
         body {
             font-family: var(--font-ui);
             background:
