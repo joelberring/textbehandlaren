@@ -389,6 +389,7 @@ class IngestionService:
         print(f"DEBUG: Searching libraries: {library_ids}")
         
         found_docs = []
+        vector_search_failed = False
         
         # Firestore currently doesn't support vector search across multiple collections easily in one call.
         # We perform search on each library and merge.
@@ -411,19 +412,38 @@ class IngestionService:
                         metadata=data["metadata"]
                     ))
             except Exception as e:
-                # Vector search might fail if index is not configured
-                # Fall back to returning no results for this library
+                vector_search_failed = True
                 print(f"Vector search failed for library {lib_id}: {e}")
                 if "index" in str(e).lower():
-                    print(f"Index missing for library {lib_id}. Ensure vector index is created.")
-                continue
+                    print(f"INDEX MISSING for library {lib_id}. Create a vector index on 'embedding' field in the 'knowledge_base' subcollection.")
         
+        # Fallback 1: if vector search failed, read chunks directly from Firestore
+        if len(found_docs) == 0 and vector_search_failed:
+            print(f"FALLBACK: Vector search failed, reading chunks directly from Firestore...")
+            for lib_id in library_ids:
+                try:
+                    collection_ref = db.collection("libraries").document(lib_id).collection("knowledge_base")
+                    # Read the most recent chunks (limited to k per library)
+                    docs = collection_ref.limit(k).stream()
+                    count = 0
+                    for doc in docs:
+                        data = doc.to_dict()
+                        if data.get("text"):
+                            found_docs.append(Document(
+                                page_content=data["text"],
+                                metadata=data.get("metadata", {})
+                            ))
+                            count += 1
+                    print(f"Firestore direct read returned {count} chunks for library {lib_id}")
+                except Exception as e:
+                    print(f"Firestore direct read also failed for library {lib_id}: {e}")
+        
+        # Fallback 2: local Chroma (disabled in production)
         if len(found_docs) == 0 and settings.ALLOW_LOCAL_FALLBACK:
             print(f"No results in Firestore, trying local Chroma fallback for libraries {library_ids}")
             fallback_docs = []
             for lib_id in library_ids:
                 try:
-                    # Optional dependency: only import when fallback is enabled/needed.
                     from backend.app.services import vectorstore
                     local_results = vectorstore.search(lib_id, query, k=k)
                     print(f"Chroma fallback returned {len(local_results)} results for library {lib_id}")
