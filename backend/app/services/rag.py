@@ -484,6 +484,16 @@ KÄLLUTDRAG:
             if attachment_library_id:
                 library_ids = list(set(library_ids + [attachment_library_id]))
 
+        # Fallback: if no libraries linked at all, use all of the user's own libraries
+        if not library_ids and user_id:
+            try:
+                user_libs = db.collection("libraries").where("user_id", "==", user_id).stream()
+                library_ids = [lib.id for lib in user_libs]
+                if library_ids:
+                    print(f"RAG fallback: using {len(library_ids)} user-owned libraries (no libraries linked to assistant)")
+            except Exception as e:
+                print(f"RAG fallback: failed to load user libraries: {e}")
+
         # Fetch learned user preferences (global + explicit + adaptive)
         learned_prefs = await self._build_learned_prefs_block(user_id)
 
