@@ -1738,11 +1738,24 @@
 
         async function loadConversation(id) {
             try {
-                const res = await fetch(`/api/chat/conversations/${id}`, { headers: getAuthHeaders() });
+                if (!id) return;
+                console.log("Fetching conversation detail for:", id);
+
+                const res = await fetch(`/api/chat/conversations/${encodeURIComponent(id)}`, { headers: getAuthHeaders() });
+                if (!res.ok) {
+                    console.error(`Failed to load conversation ${id}: ${res.status}`);
+                    // If it's a 404, the ID might be stale or generated differently
+                    return;
+                }
                 const conv = await res.json();
-                currentConversationId = conv.id || id; // Ensure ID is set
+                if (!conv) return;
+
+                // Success: Now we update state
+                currentConversationId = id;
+                messageSourceMap = {};
                 clearSourceInspector();
-                // Find assistant
+
+                // Update assistant UI
                 const asst = assistants.find(a => a.id === conv.assistant_id);
                 if (asst) {
                     currentAssistant = asst;
@@ -1751,6 +1764,7 @@
                     const projectLabel = currentProject ? `Projekt: ${currentProject.name}` : `${libCount} bibliotek kopplade`;
                     document.getElementById('linkedLibs').innerText = projectLabel;
                     document.getElementById('chatInputArea').style.display = 'flex';
+                    document.getElementById('learnBtn').style.display = 'block';
                 }
 
                 if (conv.project_id) {
@@ -1766,9 +1780,18 @@
                     }
                 }
 
-                document.getElementById('chatContainer').innerHTML = '';
-                messageSourceMap = {};
-                conv.messages.forEach(m => addMessage(m.content, m.role, m.sources || null, m.matched_images || null));
+                const container = document.getElementById('chatContainer');
+                container.innerHTML = '';
+
+                const messages = Array.isArray(conv.messages) ? conv.messages : [];
+                messages.forEach(m => {
+                    if (m && m.content) {
+                        addMessage(m.content, m.role, m.sources || null, m.matched_images || null);
+                    }
+                });
+
+                container.scrollTop = container.scrollHeight;
+                fetchConversations();
             } catch (err) {
                 console.error("Failed to load conversation:", err);
             }

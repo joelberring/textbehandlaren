@@ -185,8 +185,10 @@ async def ask_question_async(
                     error=str(e)
                 )
 
-        asyncio.create_task(_runner())
-        return {"job_id": job.id, "status": job.status}
+        # Run the runner and wait for it to complete. 
+        # This is necessary on Vercel to ensure the task finishes before the function returns.
+        await _runner()
+        return {"job_id": job.id, "status": "completed"}
     except HTTPException:
         raise
     except Exception as e:
