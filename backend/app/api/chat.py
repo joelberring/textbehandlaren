@@ -145,6 +145,10 @@ async def ask_question_async(
                 fields["partial_answer"] = partial_answer
             await job_store.update(job.id, **fields)
 
+        # Mutable container to capture the raw response from _runner()
+        # (FirestoreJobStore strips sources and truncates answer, so we bypass it)
+        _result = {"response": None, "error": None}
+
         async def _runner():
             try:
                 await job_store.update(job.id, status="running", stage="starting", progress=1, message="Startar...")
@@ -163,6 +167,7 @@ async def ask_question_async(
                     response_mode=(request.response_mode or "auto"),
                     progress_cb=_progress_cb
                 )
+                _result["response"] = response
                 await job_store.update(
                     job.id,
                     status="completed",
@@ -176,6 +181,7 @@ async def ask_question_async(
                     error=""
                 )
             except Exception as e:
+                _result["error"] = str(e)
                 await job_store.update(
                     job.id,
                     status="failed",
@@ -189,18 +195,29 @@ async def ask_question_async(
         # This is necessary on Vercel to ensure the task finishes before the function returns.
         await _runner()
 
-        # Return full result inline so the frontend doesn't need to poll a separate worker.
-        final_job = await job_store.get(job.id)
-        result = {
+        # Return full result inline from the captured raw response,
+        # bypassing FirestoreJobStore which strips sources and truncates answer.
+        if _result["error"]:
+            return {
+                "job_id": job.id,
+                "status": "failed",
+                "answer": "",
+                "sources": [],
+                "matched_images": [],
+                "debug": {},
+                "error": _result["error"],
+            }
+        
+        resp = _result["response"] or {}
+        return {
             "job_id": job.id,
-            "status": final_job.status if final_job else "completed",
-            "answer": final_job.answer if final_job else "",
-            "sources": final_job.sources if final_job else [],
-            "matched_images": final_job.matched_images if final_job else [],
-            "debug": final_job.debug if final_job else {},
-            "error": final_job.error if final_job else "",
+            "status": "completed",
+            "answer": resp.get("answer") or "",
+            "sources": resp.get("sources") or [],
+            "matched_images": resp.get("matched_images") or [],
+            "debug": resp.get("debug") or {},
+            "error": "",
         }
-        return result
     except HTTPException:
         raise
     except Exception as e:
