@@ -188,7 +188,19 @@ async def ask_question_async(
         # Run the runner and wait for it to complete. 
         # This is necessary on Vercel to ensure the task finishes before the function returns.
         await _runner()
-        return {"job_id": job.id, "status": "completed"}
+
+        # Return full result inline so the frontend doesn't need to poll a separate worker.
+        final_job = await job_store.get(job.id)
+        result = {
+            "job_id": job.id,
+            "status": final_job.status if final_job else "completed",
+            "answer": final_job.answer if final_job else "",
+            "sources": final_job.sources if final_job else [],
+            "matched_images": final_job.matched_images if final_job else [],
+            "debug": final_job.debug if final_job else {},
+            "error": final_job.error if final_job else "",
+        }
+        return result
     except HTTPException:
         raise
     except Exception as e:

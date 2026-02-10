@@ -763,7 +763,7 @@
         <div class="box requires-auth">
             <label>Word-mallar</label>
             <div id="templatesList" class="list-container">Laddar...</div>
-            <button class="requires-admin" onclick="document.getElementById('templateInput').click()">Ladda upp
+            <button class="requires-auth" onclick="document.getElementById('templateInput').click()">Ladda upp
                 mall</button>
             <input type="file" id="templateInput" hidden accept=".docx">
         </div>
@@ -2671,7 +2671,17 @@
                 }
 
                 const startData = await startRes.json();
-                const job = await pollChatJob(startData.job_id, loadingEl, startedAtMs);
+
+                let job;
+                // If the backend returned the full answer inline (Vercel synchronous mode),
+                // use it directly. Otherwise fall back to polling.
+                if (startData.status === 'completed' && (startData.answer || startData.error)) {
+                    job = startData;
+                } else if (startData.status === 'failed') {
+                    throw new Error(startData.error || "Jobbet misslyckades.");
+                } else {
+                    job = await pollChatJob(startData.job_id, loadingEl, startedAtMs);
+                }
 
                 if (loadingEl && loadingEl.parentNode) loadingEl.remove();
                 let answer = job.answer || "";

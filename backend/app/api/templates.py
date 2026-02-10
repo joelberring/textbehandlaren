@@ -36,7 +36,7 @@ def _is_safe_template_path(path: str) -> bool:
 @router.post("/upload")
 async def upload_template(
     file: UploadFile = File(...),
-    current_user: UserProfile = Depends(require_role(UserRole.ADMIN))
+    current_user: UserProfile = Depends(get_current_user)
 ):
     if not file.filename.endswith(".docx"):
         raise HTTPException(status_code=400, detail="Only .docx templates are supported.")
@@ -84,7 +84,7 @@ async def list_templates(current_user: UserProfile = Depends(get_current_user)):
 @router.delete("/{template_id}")
 async def delete_template(
     template_id: str,
-    current_user: UserProfile = Depends(require_role(UserRole.ADMIN))
+    current_user: UserProfile = Depends(get_current_user)
 ):
     doc_ref = db.collection("templates").document(template_id)
     doc = doc_ref.get()
