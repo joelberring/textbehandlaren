@@ -252,6 +252,47 @@ KÄLLUTDRAG:
         question_like = ["vad", "vem", "var", "när", "hur", "kan du", "finns", "är det"]
         return any(s in q for s in question_like) or len(q.split()) <= 12
 
+    def _is_smalltalk(self, query: str) -> bool:
+        """
+        Detect short "ping"/greeting inputs where retrieval + strict citations tend to be noise.
+        """
+        q = (query or "").strip().lower()
+        if not q:
+            return False
+        # Normalize punctuation into spaces to handle "hej!", "hej.", etc.
+        q_clean = re.sub(r"[^a-z0-9åäö]+", " ", q).strip()
+        tokens = [t for t in q_clean.split() if t]
+        if not tokens:
+            return False
+        if len(tokens) > 2:
+            return False
+        greetings = {
+            "hej", "hejsan", "hallå", "tjena", "tjenare",
+            "hello", "hi", "yo",
+            "ping", "test",
+            "ok", "okej", "tack",
+        }
+        return tokens[0] in greetings
+
+    def _query_likely_needs_sources(self, query: str) -> bool:
+        """
+        Heuristic: some requests are unsafe/meaningless to answer without the user's libraries/attachments.
+        Used for deciding whether to (a) require sources or (b) fall back to user-accessible libraries.
+        """
+        ql = (query or "").lower()
+        triggers = [
+            "bifog",
+            "bilag",
+            "sammanfatt",
+            "käll", "underlag", "källmaterial",
+            "i dokumentet", "i filen", "i rapporten",
+            "enligt dokumentet", "enligt underlaget", "enligt käll",
+            "citat", "sida", "kapitel", "avsnitt", "tabell", "figur",
+            # Domain: often implies source-grounded writing in this app
+            "samrådsredogörelse", "granskningsutlåtande", "planbeskrivning",
+        ]
+        return any(t in ql for t in triggers)
+
     def _pick_fast_model(self, selected_model: str, fallback_model: str, allowed_models: List[str]) -> str:
         if selected_model and "haiku" in selected_model:
             return selected_model
@@ -484,18 +525,6 @@ KÄLLUTDRAG:
             if attachment_library_id:
                 library_ids = list(set(library_ids + [attachment_library_id]))
 
-        # Fallback: if no libraries linked at all, use all of the user's own libraries
-        if not library_ids and user_id:
-            try:
-                # Libraries store ownership under "owner_id" (not "user_id").
-                owned_libs = db.collection("libraries").where("owner_id", "==", user_id).stream()
-                shared_libs = db.collection("libraries").where("shared_with", "array_contains", user_id).stream()
-                library_ids = list({lib.id for lib in owned_libs} | {lib.id for lib in shared_libs})
-                if library_ids:
-                    print(f"RAG fallback: using {len(library_ids)} user-accessible libraries (no libraries linked to assistant)")
-            except Exception as e:
-                print(f"RAG fallback: failed to load user libraries: {e}")
-
         # Fetch learned user preferences (global + explicit + adaptive)
         learned_prefs = await self._build_learned_prefs_block(user_id)
 
@@ -519,6 +548,28 @@ KÄLLUTDRAG:
         )
         if response_mode == "deep":
             longform_mode = True
+
+        is_smalltalk = self._is_smalltalk(scrubbed_query)
+        needs_sources = self._query_likely_needs_sources(scrubbed_query)
+        if is_smalltalk:
+            # Avoid noisy retrieval/citation flows for pings like "hej".
+            needs_sources = False
+            suggest_images = False
+            library_ids = []
+            template_structure = ""
+            project_context = ""
+
+        # Fallback: if no libraries are linked and the request likely requires sources,
+        # use the user's accessible libraries (owned or shared).
+        if not library_ids and user_id and needs_sources:
+            try:
+                owned_libs = db.collection("libraries").where("owner_id", "==", user_id).stream()
+                shared_libs = db.collection("libraries").where("shared_with", "array_contains", user_id).stream()
+                library_ids = list({lib.id for lib in owned_libs} | {lib.id for lib in shared_libs})
+                if library_ids:
+                    print(f"RAG fallback: using {len(library_ids)} user-accessible libraries (no libraries linked to assistant)")
+            except Exception as e:
+                print(f"RAG fallback: failed to load user libraries: {e}")
 
         if progress_cb:
             try:
@@ -583,9 +634,6 @@ KÄLLUTDRAG:
         else:
             base_k = 10
 
-        # Compute query embedding once and reuse across all libraries.
-        query_vector = get_embeddings().embed_query(scrubbed_query)
-
         # Build library retrieval plan with explicit weighting (0-100 priority)
         library_plan = []
         for lib_id in library_ids:
@@ -621,6 +669,12 @@ KÄLLUTDRAG:
             key=lambda x: (x["priority"], type_bias.get(x["type"], 0)),
             reverse=True
         )
+
+        # Compute query embedding once and reuse across all libraries.
+        # Skip entirely when there are no libraries to search (chat-only / smalltalk).
+        query_vector = None
+        if library_plan:
+            query_vector = get_embeddings().embed_query(scrubbed_query)
 
         def _k_for_priority(priority: int) -> int:
             if priority >= 85:
@@ -756,21 +810,8 @@ KÄLLUTDRAG:
         chat_only_mode = False
         if len(all_sources) == 0:
             # Some queries are unsafe to answer without sources (e.g. "sammanfatta bifogad fil").
-            # We keep a conservative heuristic to avoid hallucinated summaries when retrieval fails.
-            def _query_likely_needs_sources(q: str) -> bool:
-                ql = (q or "").lower()
-                triggers = [
-                    "bifog",
-                    "sammanfatt",
-                    "käll", "underlag", "källmaterial",
-                    "i dokumentet", "i filen", "i rapporten",
-                    "enligt dokumentet", "enligt underlaget", "enligt käll",
-                    "citat", "sida", "kapitel", "avsnitt", "tabell", "figur",
-                ]
-                return any(t in ql for t in triggers)
-
-            must_have_sources = bool(show_citations) or _query_likely_needs_sources(scrubbed_query)
-            if must_have_sources:
+            # In those cases we fail closed to avoid hallucinated summaries.
+            if needs_sources:
                 return {
                     "answer": "Jag hittar inga källor i dina bibliotek eller bifogade filer. Kontrollera att filerna är färdigbearbetade och försök igen.",
                     "sources": [],
@@ -781,6 +822,9 @@ KÄLLUTDRAG:
                     # which libraries were considered and why generation stopped before calling the LLM.
                     "debug": {
                         "source_count": 0,
+                        "chat_only_mode": False,
+                        "needs_sources": needs_sources,
+                        "is_smalltalk": is_smalltalk,
                         "k": base_k,
                         "max_total_sources": max_total_sources,
                         "max_chunk_chars": max_chunk_chars,
@@ -801,13 +845,13 @@ KÄLLUTDRAG:
                     },
                 }
 
-            # Citations disabled + no source-dependent intent => allow "plain chat" without sources
+            # Plain chat without sources (normal AI-chat behavior).
             chat_only_mode = True
         
         # V9: Image Retrieval
         matched_images = []
         image_needed_from_query = any(s in scrubbed_query.lower() for s in ["bild", "karta", "figur", "diagram"])
-        if suggest_images and (not simple_mode or image_needed_from_query):
+        if (not chat_only_mode) and suggest_images and (not simple_mode or image_needed_from_query):
             matched_images = await self._search_images(scrubbed_query, library_plan)
         image_context = ""
         if matched_images:
@@ -907,7 +951,7 @@ KÄLLUTDRAG:
             or "disposition" in scrubbed_query.lower()
             or longform_mode
             or bool(target_words and target_words >= 900)
-        ) and not simple_mode
+        ) and (not simple_mode) and (not chat_only_mode)
 
         if progress_cb:
             try:
@@ -920,8 +964,16 @@ KÄLLUTDRAG:
             model_meta["selected_model"] = selected_model
             model_meta["selected_model_source"] = "fast_mode"
 
-        user_input = f"""Här är det aktuella utkastet eller kontexten:
-	{current_draft if current_draft else ("Inget utkast än. Skapa ett nytt dokument baserat på instruktionen och dialogen." if chat_only_mode else "Inget utkast än. Skapa ett nytt dokument baserat på källmaterialet.")}
+        if chat_only_mode:
+            user_input = f"""Dialoghistorik:
+{history_text}
+
+Användarens meddelande:
+{scrubbed_query}
+"""
+        else:
+            user_input = f"""Här är det aktuella utkastet eller kontexten:
+	{current_draft if current_draft else "Inget utkast än. Skapa ett nytt dokument baserat på källmaterialet."}
 
 Dialoghistorik:
 {history_text}
@@ -1157,7 +1209,11 @@ Returnera hela dokumentet i markdown."""
         # Scrub AI output to prevent PII leakage in generated text
         scrubbed_answer, output_findings = await scrubber_service.scrub_text(answer)
         all_findings.extend(output_findings)
-        scrubbed_answer = self._normalize_and_filter_citations(scrubbed_answer, allowed_id_set, enable_citations=show_citations)
+        scrubbed_answer = self._normalize_and_filter_citations(
+            scrubbed_answer,
+            allowed_id_set,
+            enable_citations=bool(show_citations and (not chat_only_mode)),
+        )
 
         verified = False
         # Second-pass verification to aggressively remove hallucinations.
@@ -1193,7 +1249,7 @@ Returnera hela dokumentet i markdown."""
 
         # Hard safety: if citations are enabled and we still cannot produce any valid citations,
         # return a conservative message instead of an untraceable answer.
-        if show_citations and allowed_id_set:
+        if (not chat_only_mode) and show_citations and allowed_id_set and needs_sources:
             has_citation = bool(re.search(r"(\\[\\s*S\\d+\\s*\\]|\\(\\s*S\\d+\\s*\\))", scrubbed_answer or "", flags=re.IGNORECASE))
             if not has_citation:
                 scrubbed_answer = (
@@ -1264,6 +1320,8 @@ Returnera hela dokumentet i markdown."""
             "debug": {
                 "source_count": len(all_sources),
                 "chat_only_mode": chat_only_mode,
+                "needs_sources": needs_sources,
+                "is_smalltalk": is_smalltalk,
                 "k": base_k,
                 "max_total_sources": max_total_sources,
                 "max_chunk_chars": max_chunk_chars,

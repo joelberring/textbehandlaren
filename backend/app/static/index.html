@@ -911,8 +911,11 @@
         <label>Ny Assistent</label>
         <input type="text" id="asstName" placeholder="Namn">
         <textarea id="asstPrompt" placeholder="Systemprompt"></textarea>
-        <label>Koppla bibliotek (Håll in Ctrl för att välja flera)</label>
-        <select id="asstLibs" multiple style="height: 80px;"></select>
+        <label>Koppla bibliotek</label>
+        <div id="asstLibs"
+            style="border:1px solid var(--border); padding:0.5rem; max-height:120px; overflow-y:auto; font-size:0.65rem;">
+            <div style="color:var(--muted);">Laddar bibliotek...</div>
+        </div>
         <label>Modell för assistent</label>
         <select id="asstModel">
             <option value="">Systemstandard (global)</option>
@@ -1158,12 +1161,11 @@
                 renderTemplates(temps);
                 renderProjects(projs);
 
-                // Fill select boxes
-                const asstLibs = document.getElementById('asstLibs');
-                asstLibs.innerHTML = libs.map(l => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.name)}</option>`).join('');
-                const asstTemp = document.getElementById('asstTemplate');
-                asstTemp.innerHTML = `<option value="">Standardmall</option>` + temps.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
-                renderAssistantPriorityProfile(assistantPriorityDraft);
+	                // Fill assistant modal controls
+	                renderAssistantLibraryChecklist();
+	                const asstTemp = document.getElementById('asstTemplate');
+	                asstTemp.innerHTML = `<option value="">Standardmall</option>` + temps.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
+	                renderAssistantPriorityProfile(assistantPriorityDraft);
 
                 fetchConversations();
                 fetchHealth();
@@ -1308,15 +1310,47 @@
 
         let editingResourceId = null;
 
-        function clampPriorityValue(value, fallback = 50) {
-            if (!Number.isFinite(value)) return fallback;
-            return Math.max(0, Math.min(100, value));
-        }
+	        function clampPriorityValue(value, fallback = 50) {
+	            if (!Number.isFinite(value)) return fallback;
+	            return Math.max(0, Math.min(100, value));
+	        }
 
-        function getAssistantPriorityDraft() {
-            const map = { ...assistantPriorityDraft };
-            document.querySelectorAll('#asstPriorityProfile input[data-lib-id]').forEach((input) => {
-                const libId = input.dataset.libId;
+	        function getSelectedAssistantLibraryIds() {
+	            const container = document.getElementById('asstLibs');
+	            if (!container) return [];
+	            const inputs = container.querySelectorAll('input[type="checkbox"][data-lib-id]');
+	            return Array.from(inputs)
+	                .filter(i => i && i.checked && i.dataset && i.dataset.libId)
+	                .map(i => i.dataset.libId);
+	        }
+
+	        function renderAssistantLibraryChecklist(selectedIds = null) {
+	            const container = document.getElementById('asstLibs');
+	            if (!container) return;
+	            const selected = new Set(selectedIds || getSelectedAssistantLibraryIds());
+
+	            if (!Array.isArray(libraries) || libraries.length === 0) {
+	                container.innerHTML = '<div style="color:var(--muted);">Inga bibliotek tillgängliga.</div>';
+	                return;
+	            }
+
+	            container.innerHTML = libraries.map((lib) => {
+	                const libId = String(lib.id || "");
+	                const checked = selected.has(libId) ? "checked" : "";
+	                const prio = (lib.priority ?? 50);
+	                return `
+	                    <label style="display:flex; align-items:center; gap:0.45rem; margin-bottom:0.25rem; cursor:pointer;">
+	                        <input type="checkbox" data-lib-id="${escapeHtml(libId)}" ${checked} style="width:auto;">
+	                        <span>${escapeHtml(lib.name || libId)} <span style="color:var(--muted);">(P:${escapeHtml(String(prio))})</span></span>
+	                    </label>
+	                `;
+	            }).join('');
+	        }
+
+	        function getAssistantPriorityDraft() {
+	            const map = { ...assistantPriorityDraft };
+	            document.querySelectorAll('#asstPriorityProfile input[data-lib-id]').forEach((input) => {
+	                const libId = input.dataset.libId;
                 if (!libId) return;
                 const parsed = parseInt(input.value || input.placeholder || '50', 10);
                 map[libId] = clampPriorityValue(parsed, 50);
@@ -1324,14 +1358,13 @@
             return map;
         }
 
-        function renderAssistantPriorityProfile(seed = null) {
-            const container = document.getElementById('asstPriorityProfile');
-            const select = document.getElementById('asstLibs');
-            if (!container || !select) return;
+	        function renderAssistantPriorityProfile(seed = null) {
+	            const container = document.getElementById('asstPriorityProfile');
+	            if (!container) return;
 
-            const selectedIds = Array.from(select.selectedOptions).map(o => o.value);
-            const preserved = seed || getAssistantPriorityDraft();
-            assistantPriorityDraft = { ...preserved };
+	            const selectedIds = getSelectedAssistantLibraryIds();
+	            const preserved = seed || getAssistantPriorityDraft();
+	            assistantPriorityDraft = { ...preserved };
 
             if (selectedIds.length === 0) {
                 container.innerHTML = "Välj bibliotek för att ställa prioritet.";
@@ -1376,20 +1409,17 @@
                 document.getElementById('libScrub').checked = item.scrub_enabled || false;
                 document.getElementById('libGdprDefault').checked = item.gdpr_name_scrub_default || false;
                 showModal('libraryModal');
-            } else {
-                document.getElementById('asstName').value = item.name;
-                document.getElementById('asstPrompt').value = item.system_prompt;
-                document.getElementById('asstTemplate').value = item.template_id || "";
-                document.getElementById('asstModel').value = item.model_preference || "";
-                const selectedLibs = Array.isArray(item.library_ids) ? item.library_ids : [];
-                const asstLibs = document.getElementById('asstLibs');
-                Array.from(asstLibs.options).forEach((opt) => {
-                    opt.selected = selectedLibs.includes(opt.value);
-                });
-                assistantPriorityDraft = {};
-                (item.library_priority_profile || []).forEach((row) => {
-                    if (!row || !row.library_id) return;
-                    const prio = parseInt(String(row.priority ?? 50), 10);
+	            } else {
+	                document.getElementById('asstName').value = item.name;
+	                document.getElementById('asstPrompt').value = item.system_prompt;
+	                document.getElementById('asstTemplate').value = item.template_id || "";
+	                document.getElementById('asstModel').value = item.model_preference || "";
+	                const selectedLibs = Array.isArray(item.library_ids) ? item.library_ids : [];
+	                renderAssistantLibraryChecklist(selectedLibs);
+	                assistantPriorityDraft = {};
+	                (item.library_priority_profile || []).forEach((row) => {
+	                    if (!row || !row.library_id) return;
+	                    const prio = parseInt(String(row.priority ?? 50), 10);
                     assistantPriorityDraft[row.library_id] = clampPriorityValue(prio, 50);
                 });
                 renderAssistantPriorityProfile(assistantPriorityDraft);
@@ -1409,14 +1439,11 @@
                 document.getElementById('libType').value = 'BACKGROUND';
                 document.getElementById('libPriority').value = '50';
             }
-            if (id === 'assistantModal') {
-                const asstLibs = document.getElementById('asstLibs');
-                if (asstLibs) {
-                    Array.from(asstLibs.options).forEach((opt) => { opt.selected = false; });
-                }
-                assistantPriorityDraft = {};
-                renderAssistantPriorityProfile(assistantPriorityDraft);
-            }
+	            if (id === 'assistantModal') {
+	                renderAssistantLibraryChecklist([]);
+	                assistantPriorityDraft = {};
+	                renderAssistantPriorityProfile(assistantPriorityDraft);
+	            }
             showModal(id);
         }
 
@@ -1554,11 +1581,9 @@
 	            const name = document.getElementById('asstName').value;
 	            if (!name) return alert("Ange ett namn");
 
-	            const prompt = document.getElementById('asstPrompt').value;
-	            const asstLibsEl = document.getElementById('asstLibs');
-	            // Use a robust selection reader (Safari/iOS can be finicky with selectedOptions on multi-selects).
-	            const library_ids = Array.from(asstLibsEl?.options || []).filter(o => o && o.selected).map(o => o.value);
-	            const library_priority_profile = collectAssistantPriorityProfile(library_ids);
+		            const prompt = document.getElementById('asstPrompt').value;
+		            const library_ids = getSelectedAssistantLibraryIds();
+		            const library_priority_profile = collectAssistantPriorityProfile(library_ids);
 	            const template_id = document.getElementById('asstTemplate').value;
 	            const model_preference = document.getElementById('asstModel').value || null;
 
